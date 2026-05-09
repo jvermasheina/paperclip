@@ -47,4 +47,11 @@ describe("adapter defaults registry", () => {
     expect(d.envKeys).toEqual(expect.arrayContaining(["GEMINI_API_KEY", "GOOGLE_API_KEY"]));
     expect(d.allowFqdns).toContain("generativelanguage.googleapis.com");
   });
+
+  it("acpx_local has expected env + fqdn defaults", () => {
+    const d = getAdapterDefaults("acpx_local");
+    expect(d.runtimeImage).toMatch(/agent-runtime-acpx/);
+    expect(d.envKeys).toEqual(expect.arrayContaining(["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]));
+    expect(d.allowFqdns).toEqual(expect.arrayContaining(["api.anthropic.com", "api.openai.com"]));
+  });
 });

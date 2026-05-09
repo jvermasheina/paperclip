@@ -46,6 +46,11 @@ export const ADAPTER_DEFAULTS: Record<string, AdapterDefaults> = {
     envKeys: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
     allowFqdns: ["generativelanguage.googleapis.com"],
   },
+  acpx_local: {
+    runtimeImage: `${REGISTRY_BASE}/agent-runtime-acpx`,
+    envKeys: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
+    allowFqdns: ["api.anthropic.com", "api.openai.com"],
+  },
 };
 
 export function getAdapterDefaults(adapterType: string): AdapterDefaults {

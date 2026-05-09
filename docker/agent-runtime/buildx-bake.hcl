@@ -1,5 +1,5 @@
 group "default" {
-  targets = ["base", "claude", "codex", "gemini"]
+  targets = ["base", "claude", "codex", "gemini", "acpx"]
 }
 
 variable "VERSION" { default = "dev" }
@@ -37,6 +37,16 @@ target "gemini" {
   dockerfile = "docker/agent-runtime/Dockerfile.gemini"
   platforms = ["linux/amd64", "linux/arm64"]
   tags = ["${REGISTRY}/agent-runtime-gemini:${VERSION}"]
+  contexts = {
+    "paperclipai/agent-runtime-base:${VERSION}" = "target:base"
+  }
+}
+
+target "acpx" {
+  context = "."
+  dockerfile = "docker/agent-runtime/Dockerfile.acpx"
+  platforms = ["linux/amd64", "linux/arm64"]
+  tags = ["${REGISTRY}/agent-runtime-acpx:${VERSION}"]
   contexts = {
     "paperclipai/agent-runtime-base:${VERSION}" = "target:base"
   }
