@@ -229,6 +229,56 @@ The secret provider abstraction supports `aws_secrets`, `gcp_secret`, `vault`, a
 
 Operators running a self-hosted Paperclip instance without access to a cloud secret manager should use `env:<VAR_NAME>` for the kubeconfig secret during M1.
 
+## Run-JWT lifecycle (M2)
+
+Agent containers cannot speak Kubernetes — they have no projected ServiceAccount token (see [Pod identity](#pod-identity-zero-trust-by-default)) and the agent ServiceAccount has no RBAC. To call back to the Paperclip server they use a two-step token exchange:
+
+1. **Bootstrap token mint.** The driver calls `bootstrapTokensService` (`server/src/services/bootstrap-tokens.ts`) to mint a single-use, short-lived token bound to `(agentId, companyId, runId)`. The token is sealed into the per-Job Secret as `BOOTSTRAP_TOKEN` before the Job is created.
+2. **Exchange.** Inside the pod, `paperclip-agent-shim` sends `POST /api/agent-auth/exchange` with the bootstrap token. The server validates one-time use, atomically marks the token consumed, and returns a **run JWT** signed with `PAPERCLIP_RUN_JWT_SECRET` (`server/src/services/run-jwt.ts`).
+3. **Run JWT.** The run JWT carries `runId`, `agentId`, `companyId`, and the Job UID. It expires after the run's `activeDeadlineSeconds` ceiling. Every subsequent agent → server call (`POST /api/runs/:runId/events`, `POST /api/workspace/git-credentials`) presents the run JWT and the server validates the claims against the live run.
+
+If `PAPERCLIP_RUN_JWT_SECRET` is unset on the server, the callback routes are skipped during app boot. The driver still mints bootstrap tokens, but every exchange request is rejected — verify the env var is set if agents log `401 invalid_token` during bootstrap.
+
+## TokenReview disposition (V1)
+
+The full Kubernetes-native `TokenReview` flow (where the server validates a projected ServiceAccount token straight from the cluster's API) is **deferred to V2**. M2 ships the bootstrap-token + run-JWT model above. Trade-off:
+
+- **What we lose:** the run JWT is signed by the Paperclip server, not by the cluster's API server, so revocation is per-tenant policy (rotate `PAPERCLIP_RUN_JWT_SECRET`) rather than per-Pod TokenRequest revocation.
+- **What we keep:** bootstrap tokens are single-use and short-lived; run JWTs are scoped to `(runId, agentId, companyId, jobUid)` so a stolen JWT cannot be replayed against a different run. Cross-cluster TokenReview tracking lives in [ROADMAP.md](../../ROADMAP.md) under M3 (Risk #5).
+
+## Per-Job Secret with OwnerReferences
+
+Run-time credentials (bootstrap token, redacted adapter env, optional git credentials) are sealed into a per-Job `Secret` of type `Opaque`. The driver's two-phase commit:
+
+1. **Create Secret first.** `POST /api/v1/namespaces/<ns>/secrets` with the Secret body but no owner. The Secret is mounted as a read-only `secret` volume on the Job's pod template.
+2. **Create Job.** `POST /apis/batch/v1/namespaces/<ns>/jobs` with the Pod template that references the Secret by name.
+3. **Patch ownerReferences onto the Secret.** A `kubectl patch` equivalent rewrites the Secret's `metadata.ownerReferences` to point at the Job UID returned in step 2.
+
+After step 3, when the Job's `ttlSecondsAfterFinished` expires, Kubernetes garbage-collects the Job and cascades the deletion to the Secret. There is no manual cleanup path for orphaned Secrets.
+
+**Why not CSI Secrets Store?** CSI Secrets Store would inject credentials directly from a cloud secret manager into the pod, but:
+- It requires the CSI driver be installed on every workload cluster (operator burden in a BYO-cluster product).
+- It doesn't support the "credential exists only for the lifetime of one Job" model — secrets are per-`SecretProviderClass`, not per-Job.
+- It cannot redact adapter env at materialization time, which is a hard requirement (see `packages/adapters/kubernetes-execution/src/redaction.ts`).
+
+The two-phase commit is V1's shippable answer. CSI Secrets Store is on the roadmap for M3+ as an opt-in alternative.
+
+## Secret resolver providers
+
+The secret-resolver contract (`provider`, `name` → secret value) ships in M2 with the following providers:
+
+| Provider | Wired in | Use case |
+|----------|----------|----------|
+| `env` | M1 | Read from process env. Lab and self-hosted setups. |
+| `aws_secrets` | M1 | AWS Secrets Manager ARN or secret name. |
+| `gcp_secret` | M1 | GCP Secret Manager resource path. |
+| `vault` | M1 | HashiCorp Vault path. |
+| `local_encrypted` | M1 | Paperclip-managed encrypted store, server local. |
+| `aws_secrets_manager` | **M3** | Higher-level AWS provider with caching + IAM-role assumption. |
+| `gcp_secret_manager` | **M3** | Higher-level GCP provider with workload-identity binding. |
+
+M2 does not change the M1 provider list. The contract is stable; M3 adds higher-level providers without breaking existing rows.
+
 ## Compliance bookkeeping
 
 The M1 provisioning pipeline is aligned with:

@@ -187,6 +187,25 @@ Labels: pod-security.kubernetes.io/enforce=restricted
         paperclip.ai/company-id=<uuid>
 ```
 
+## Run your first agent
+
+After a cluster is bound to a tenant, run an agent on it:
+
+```bash
+paperclipai agent register --company acme --adapter claude_local \
+  --execution-target kubernetes:prod
+paperclipai agent run --agent <id> --prompt "say hi"
+```
+
+Expected: streamed logs from the agent pod ending with the assistant text.
+
+If logs appear empty, check that:
+1. The `agent-runtime-claude` image is reachable from the cluster (cosign verify the image, see [security-model.md](./security-model.md)).
+2. The bootstrap-token exchange route is reachable: `curl https://<paperclip-public-url>/api/agent-auth/exchange -d '{}'` should return `400 missing_token` (proves it's wired).
+3. `PAPERCLIP_RUN_JWT_SECRET` is set on the server (otherwise the routes are mounted but reject every request).
+
+For the full walkthrough of what happens between `agent run` and assistant text reaching your terminal, see [agent-execution-flow.md](./agent-execution-flow.md). For failure-mode triage, see [troubleshooting.md](./troubleshooting.md).
+
 ## What's not in M1
 
 | Feature | Milestone |
