@@ -19,6 +19,12 @@ export function registerPluginContributions(
 ): void {
   for (const manifest of manifests) {
     if (manifest.kind !== "oauth_provider" && manifest.kind !== "composite") {
+      if (manifest.oauthProviders && manifest.oauthProviders.length > 0) {
+        logger.warn(
+          { plugin: manifest.id, kind: manifest.kind },
+          "manifest has oauthProviders but kind is not 'oauth_provider' or 'composite'; contributions skipped",
+        );
+      }
       continue;
     }
     const contributions = manifest.oauthProviders ?? [];
