@@ -4,10 +4,22 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { Issue, IssueBlockedInboxAttention } from "@paperclipai/shared";
 import { BlockedInboxView } from "@/components/BlockedInboxView";
 import { BlockedReasonChip } from "@/components/BlockedReasonChip";
+import { defaultIssueFilterState } from "@/lib/issue-filters";
 import { queryKeys } from "@/lib/queryKeys";
 import { storybookIssues } from "../fixtures/paperclipData";
 
 const companyId = "company-storybook";
+const blockedViewDefaults = {
+  groupBy: "none" as const,
+  sortBy: "most_recent" as const,
+  issueFilters: defaultIssueFilterState,
+  currentUserId: "local-board",
+  liveIssueIds: new Set<string>(),
+  workspaceFilterContext: {},
+  showStatusColumn: true,
+  showIdentifierColumn: true,
+  showUpdatedColumn: true,
+};
 
 function attention(
   overrides: Partial<IssueBlockedInboxAttention> = {},
@@ -170,6 +182,7 @@ function BlockedTabSurface({ search = "" }: { search?: string }) {
         </div>
         <div className="rounded-lg border border-border bg-background p-4">
           <BlockedInboxView
+            {...blockedViewDefaults}
             companyId={companyId}
             searchQuery={search}
             agentNameById={new Map()}
@@ -241,6 +254,7 @@ function BlockedTabEmptyState() {
   return (
     <div className="rounded-lg border border-border bg-background p-4">
       <BlockedInboxView
+        {...blockedViewDefaults}
         companyId="company-empty"
         searchQuery=""
         agentNameById={new Map()}

@@ -105,6 +105,20 @@ export interface BlockedInboxIssueRow {
   stoppedAtMs: number | null;
 }
 
+export type BlockedInboxGroupBy = "blocker_type" | "none";
+export type BlockedInboxSort = "urgency" | "most_recent" | "longest_stopped";
+
+export const BLOCKED_GROUP_OPTIONS: readonly [BlockedInboxGroupBy, string][] = [
+  ["blocker_type", "Blocker type"],
+  ["none", "None"],
+];
+
+export const BLOCKED_SORT_OPTIONS: readonly [BlockedInboxSort, string][] = [
+  ["urgency", "Most urgent"],
+  ["most_recent", "Most recent"],
+  ["longest_stopped", "Longest stopped"],
+];
+
 export interface BlockedInboxGroup {
   variant: BlockedReasonVariant;
   label: string;
@@ -127,7 +141,63 @@ export function buildBlockedInboxRows(issues: readonly Issue[]): BlockedInboxIss
   return rows;
 }
 
-export function groupBlockedInboxRows(rows: readonly BlockedInboxIssueRow[]): BlockedInboxGroup[] {
+function issueTimestampMs(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function blockedRowRecencyMs(row: BlockedInboxIssueRow): number {
+  return row.stoppedAtMs ?? issueTimestampMs(row.issue.updatedAt) ?? 0;
+}
+
+function compareBlockedRowsByTitle(a: BlockedInboxIssueRow, b: BlockedInboxIssueRow): number {
+  const byTitle = a.issue.title.localeCompare(b.issue.title);
+  if (byTitle !== 0) return byTitle;
+  return a.issue.id.localeCompare(b.issue.id);
+}
+
+export function compareBlockedRows(
+  a: BlockedInboxIssueRow,
+  b: BlockedInboxIssueRow,
+  sort: BlockedInboxSort = "urgency",
+): number {
+  if (sort === "most_recent") {
+    const recencyDiff = blockedRowRecencyMs(b) - blockedRowRecencyMs(a);
+    if (recencyDiff !== 0) return recencyDiff;
+    const attentionDiff = compareBlockedAttention(a.attention, b.attention);
+    if (attentionDiff !== 0) return attentionDiff;
+    return compareBlockedRowsByTitle(a, b);
+  }
+
+  if (sort === "longest_stopped") {
+    const aStopped = a.stoppedAtMs ?? Number.POSITIVE_INFINITY;
+    const bStopped = b.stoppedAtMs ?? Number.POSITIVE_INFINITY;
+    const stoppedDiff = aStopped - bStopped;
+    if (stoppedDiff !== 0) return stoppedDiff;
+    const severityDiff = blockedSeverityRank(a.attention.severity) - blockedSeverityRank(b.attention.severity);
+    if (severityDiff !== 0) return severityDiff;
+    return compareBlockedRowsByTitle(a, b);
+  }
+
+  const attentionDiff = compareBlockedAttention(a.attention, b.attention);
+  if (attentionDiff !== 0) return attentionDiff;
+  const recencyDiff = blockedRowRecencyMs(b) - blockedRowRecencyMs(a);
+  if (recencyDiff !== 0) return recencyDiff;
+  return compareBlockedRowsByTitle(a, b);
+}
+
+export function sortBlockedInboxRows(
+  rows: readonly BlockedInboxIssueRow[],
+  sort: BlockedInboxSort = "urgency",
+): BlockedInboxIssueRow[] {
+  return [...rows].sort((a, b) => compareBlockedRows(a, b, sort));
+}
+
+export function groupBlockedInboxRows(
+  rows: readonly BlockedInboxIssueRow[],
+  sort: BlockedInboxSort = "urgency",
+): BlockedInboxGroup[] {
   const buckets = new Map<BlockedReasonVariant, BlockedInboxIssueRow[]>();
   for (const row of rows) {
     const list = buckets.get(row.variant) ?? [];
@@ -138,7 +208,7 @@ export function groupBlockedInboxRows(rows: readonly BlockedInboxIssueRow[]): Bl
   for (const variant of BLOCKED_REASON_VARIANT_ORDER) {
     const list = buckets.get(variant);
     if (!list || list.length === 0) continue;
-    const sorted = [...list].sort((a, b) => compareBlockedAttention(a.attention, b.attention));
+    const sorted = sortBlockedInboxRows(list, sort);
     groups.push({ variant, label: BLOCKED_VARIANT_LABELS[variant], rows: sorted });
   }
   return groups;

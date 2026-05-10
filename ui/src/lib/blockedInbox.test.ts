@@ -17,8 +17,10 @@ import {
   blockedVariantLabel,
   buildBlockedInboxRows,
   compareBlockedAttention,
+  compareBlockedRows,
   formatStoppedAge,
   groupBlockedInboxRows,
+  sortBlockedInboxRows,
   type BlockedInboxIssueRow,
 } from "./blockedInbox";
 
@@ -181,6 +183,44 @@ describe("blockedInbox", () => {
     ]);
     const stalled = groups.find((g) => g.variant === "stalled")!;
     expect(stalled.rows.map((r) => r.issue.id)).toEqual(["stalled-2", "stalled-1"]);
+  });
+
+  it("sortBlockedInboxRows supports recent and longest-stopped ordering", () => {
+    const rows = buildBlockedInboxRows([
+      makeIssue(
+        { id: "old", title: "Old stopped" },
+        makeAttention({
+          severity: "low",
+          stoppedSinceAt: "2026-05-06T00:00:00.000Z",
+        }),
+      ),
+      makeIssue(
+        { id: "recent", title: "Recently stopped" },
+        makeAttention({
+          severity: "critical",
+          stoppedSinceAt: "2026-05-09T00:00:00.000Z",
+        }),
+      ),
+      makeIssue(
+        { id: "middle", title: "Middle stopped" },
+        makeAttention({
+          severity: "medium",
+          stoppedSinceAt: "2026-05-08T00:00:00.000Z",
+        }),
+      ),
+    ]);
+
+    expect(sortBlockedInboxRows(rows, "most_recent").map((row) => row.issue.id)).toEqual([
+      "recent",
+      "middle",
+      "old",
+    ]);
+    expect(sortBlockedInboxRows(rows, "longest_stopped").map((row) => row.issue.id)).toEqual([
+      "old",
+      "middle",
+      "recent",
+    ]);
+    expect(compareBlockedRows(rows[0], rows[1], "most_recent")).toBeGreaterThan(0);
   });
 
   it("blockedRowMatchesSearch matches title, identifier, owner, action and reason", () => {

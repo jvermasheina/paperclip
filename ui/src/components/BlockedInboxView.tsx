@@ -5,12 +5,16 @@ import type { Issue } from "@paperclipai/shared";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
+import { applyIssueFilters, type IssueFilterState, type IssueFilterWorkspaceContext } from "../lib/issue-filters";
 import {
   blockedRowMatchesSearch,
   buildBlockedInboxRows,
   formatStoppedAge,
   groupBlockedInboxRows,
+  sortBlockedInboxRows,
+  type BlockedInboxGroupBy,
   type BlockedInboxIssueRow,
+  type BlockedInboxSort,
 } from "../lib/blockedInbox";
 import { BlockedReasonChip } from "./BlockedReasonChip";
 import { IssueGroupHeader } from "./IssueGroupHeader";
@@ -25,6 +29,15 @@ interface BlockedInboxViewProps {
   agentNameById: ReadonlyMap<string, string>;
   userLabelById?: ReadonlyMap<string, string>;
   issueLinkState: unknown;
+  groupBy: BlockedInboxGroupBy;
+  sortBy: BlockedInboxSort;
+  issueFilters: IssueFilterState;
+  currentUserId: string | null;
+  liveIssueIds: ReadonlySet<string>;
+  workspaceFilterContext: IssueFilterWorkspaceContext;
+  showStatusColumn: boolean;
+  showIdentifierColumn: boolean;
+  showUpdatedColumn: boolean;
 }
 
 const BLOCKED_LIST_LIMIT = 200;
@@ -35,6 +48,15 @@ export function BlockedInboxView({
   agentNameById,
   userLabelById,
   issueLinkState,
+  groupBy,
+  sortBy,
+  issueFilters,
+  currentUserId,
+  liveIssueIds,
+  workspaceFilterContext,
+  showStatusColumn,
+  showIdentifierColumn,
+  showUpdatedColumn,
 }: BlockedInboxViewProps) {
   const [collapsedVariants, setCollapsedVariants] = useState<Set<string>>(() => new Set());
 
@@ -60,7 +82,24 @@ export function BlockedInboxView({
     () => allRows.filter((row) => blockedRowMatchesSearch(row, searchQuery)),
     [allRows, searchQuery],
   );
-  const groups = useMemo(() => groupBlockedInboxRows(filteredRows), [filteredRows]);
+  const issueFilteredRows = useMemo(() => {
+    const visibleIssueIds = new Set(
+      applyIssueFilters(
+        filteredRows.map((row) => row.issue),
+        issueFilters,
+        currentUserId,
+        true,
+        liveIssueIds,
+        workspaceFilterContext,
+      ).map((issue) => issue.id),
+    );
+    return filteredRows.filter((row) => visibleIssueIds.has(row.issue.id));
+  }, [currentUserId, filteredRows, issueFilters, liveIssueIds, workspaceFilterContext]);
+  const sortedRows = useMemo(() => sortBlockedInboxRows(issueFilteredRows, sortBy), [issueFilteredRows, sortBy]);
+  const groups = useMemo(
+    () => groupBlockedInboxRows(issueFilteredRows, sortBy),
+    [issueFilteredRows, sortBy],
+  );
 
   const toggleVariant = (variant: string) => {
     setCollapsedVariants((prev) => {
@@ -148,45 +187,67 @@ export function BlockedInboxView({
 
   if (groups.length === 0) {
     return (
-      <div
-        data-testid="blocked-inbox-no-search-results"
-        className="rounded-lg border border-border/70 bg-card/40 px-4 py-6 text-center text-sm text-muted-foreground"
-      >
-        No stopped items match your search.
+      <div className="space-y-3">
+        <div
+          data-testid="blocked-inbox-no-search-results"
+          className="rounded-lg border border-border/70 bg-card/40 px-4 py-6 text-center text-sm text-muted-foreground"
+        >
+          No stopped items match your search.
+        </div>
       </div>
     );
   }
 
   return (
-    <div data-testid="blocked-inbox" className="overflow-hidden rounded-xl">
-      {groups.map((group) => {
-        const isCollapsed = collapsedVariants.has(group.variant);
-        return (
-          <div key={group.variant} data-testid={`blocked-inbox-group-${group.variant}`}>
-            <div className="px-3 sm:px-4">
-              <IssueGroupHeader
-                label={`${group.label} · ${group.rows.length}`}
-                collapsible
-                collapsed={isCollapsed}
-                onToggle={() => toggleVariant(group.variant)}
-              />
-            </div>
-            {!isCollapsed && (
-              <div>
-                {group.rows.map((row) => (
-                  <BlockedInboxRow
-                    key={row.issue.id}
-                    row={row}
-                    issueLinkState={issueLinkState}
-                    agentNameById={agentNameById}
-                    userLabelById={userLabelById}
+    <div data-testid="blocked-inbox" className="space-y-3">
+      <div className="overflow-hidden rounded-xl">
+        {groupBy === "none" ? (
+          sortedRows.map((row) => (
+            <BlockedInboxRow
+              key={row.issue.id}
+              row={row}
+              issueLinkState={issueLinkState}
+              agentNameById={agentNameById}
+              userLabelById={userLabelById}
+              showStatusColumn={showStatusColumn}
+              showIdentifierColumn={showIdentifierColumn}
+              showUpdatedColumn={showUpdatedColumn}
+            />
+          ))
+        ) : (
+          groups.map((group) => {
+            const isCollapsed = collapsedVariants.has(group.variant);
+            return (
+              <div key={group.variant} data-testid={`blocked-inbox-group-${group.variant}`}>
+                <div className="px-3 sm:px-4">
+                  <IssueGroupHeader
+                    label={`${group.label} · ${group.rows.length}`}
+                    collapsible
+                    collapsed={isCollapsed}
+                    onToggle={() => toggleVariant(group.variant)}
                   />
-                ))}
+                </div>
+                {!isCollapsed && (
+                  <div>
+                    {group.rows.map((row) => (
+                      <BlockedInboxRow
+                        key={row.issue.id}
+                        row={row}
+                        issueLinkState={issueLinkState}
+                        agentNameById={agentNameById}
+                        userLabelById={userLabelById}
+                        showStatusColumn={showStatusColumn}
+                        showIdentifierColumn={showIdentifierColumn}
+                        showUpdatedColumn={showUpdatedColumn}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -196,6 +257,9 @@ interface BlockedInboxRowProps {
   issueLinkState: unknown;
   agentNameById: ReadonlyMap<string, string>;
   userLabelById?: ReadonlyMap<string, string>;
+  showStatusColumn: boolean;
+  showIdentifierColumn: boolean;
+  showUpdatedColumn: boolean;
 }
 
 function resolveOwnerName(
@@ -219,32 +283,41 @@ function BlockedInboxRow({
   issueLinkState,
   agentNameById,
   userLabelById,
+  showStatusColumn,
+  showIdentifierColumn,
+  showUpdatedColumn,
 }: BlockedInboxRowProps) {
   const { label: ownerName, isAgent } = resolveOwnerName(row, agentNameById, userLabelById);
   const stoppedAge = formatStoppedAge(row.attention.stoppedSinceAt);
 
   const desktopTrailing = (
     <span className="flex shrink-0 items-center gap-3 text-xs">
+      <span
+        className="hidden w-[10.5rem] shrink-0 justify-start sm:inline-flex"
+        data-testid="blocked-row-reason-column"
+      >
+        <BlockedReasonChip
+          reason={row.attention.reason}
+          severity={row.attention.severity}
+          className="max-w-full"
+        />
+      </span>
       {ownerName ? (
-        <span className="hidden items-center gap-1 text-muted-foreground sm:inline-flex">
+        <span className="hidden w-[150px] min-w-0 items-center text-muted-foreground sm:inline-flex">
           <Identity
             name={ownerName}
             size="xs"
-            className="max-w-[140px]"
+            className="max-w-full"
           />
-          <span aria-hidden="true">·</span>
-          <span className="italic" data-testid="blocked-row-action">
-            {row.attention.action.label}
-          </span>
         </span>
       ) : (
-        <span className="hidden italic text-muted-foreground sm:inline" data-testid="blocked-row-action">
-          {row.attention.action.label}
-        </span>
+        <span className="hidden w-[150px] shrink-0 sm:inline-flex" aria-hidden="true" />
       )}
-      <span className="hidden text-muted-foreground sm:inline" data-testid="blocked-row-age">
-        {stoppedAge}
-      </span>
+      {showUpdatedColumn ? (
+        <span className="hidden w-[5.75rem] text-right text-muted-foreground sm:inline" data-testid="blocked-row-age">
+          {stoppedAge}
+        </span>
+      ) : null}
     </span>
   );
 
@@ -262,10 +335,6 @@ function BlockedInboxRow({
           </span>
         </>
       ) : null}
-      <span aria-hidden="true">·</span>
-      <span className="italic" data-testid="blocked-row-action-mobile">
-        {row.attention.action.label}
-      </span>
     </span>
   );
 
@@ -274,17 +343,23 @@ function BlockedInboxRow({
       issue={row.issue}
       issueLinkState={issueLinkState}
       desktopMetaLeading={
-        <BlockedRowDesktopMeta row={row} />
+        <BlockedRowDesktopMeta
+          row={row}
+          showStatusColumn={showStatusColumn}
+          showIdentifierColumn={showIdentifierColumn}
+        />
       }
       mobileLeading={
         <span className="flex shrink-0 items-center gap-1.5 pt-px">
           <StatusIcon status={row.issue.status} blockerAttention={row.issue.blockerAttention} />
-          <BlockedReasonChip
-            reason={row.attention.reason}
-            severity={row.attention.severity}
-            compact
-          />
         </span>
+      }
+      titleSuffix={
+        <BlockedReasonChip
+          reason={row.attention.reason}
+          severity={row.attention.severity}
+          className="ml-2 max-w-[12rem] align-middle sm:hidden"
+        />
       }
       mobileMeta={mobileMeta}
       desktopTrailing={desktopTrailing}
@@ -292,16 +367,20 @@ function BlockedInboxRow({
   );
 }
 
-function BlockedRowDesktopMeta({ row }: { row: BlockedInboxIssueRow }) {
+function BlockedRowDesktopMeta({
+  row,
+  showStatusColumn,
+  showIdentifierColumn,
+}: {
+  row: BlockedInboxIssueRow;
+  showStatusColumn: boolean;
+  showIdentifierColumn: boolean;
+}) {
   const identifier = row.issue.identifier ?? row.issue.id.slice(0, 8);
   return (
     <span className="hidden shrink-0 items-center gap-2 sm:inline-flex">
-      <StatusIcon status={row.issue.status} blockerAttention={row.issue.blockerAttention} />
-      <span className="font-mono text-xs text-muted-foreground">{identifier}</span>
-      <BlockedReasonChip
-        reason={row.attention.reason}
-        severity={row.attention.severity}
-      />
+      {showStatusColumn ? <StatusIcon status={row.issue.status} blockerAttention={row.issue.blockerAttention} /> : null}
+      {showIdentifierColumn ? <span className="font-mono text-xs text-muted-foreground">{identifier}</span> : null}
     </span>
   );
 }

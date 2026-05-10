@@ -32,6 +32,7 @@ vi.mock("@/lib/router", () => ({
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 import { BlockedInboxView } from "./BlockedInboxView";
+import { defaultIssueFilterState } from "../lib/issue-filters";
 
 function attention(
   overrides: Partial<IssueBlockedInboxAttention> = {},
@@ -110,6 +111,22 @@ function renderWithClient(node: React.ReactNode, container: HTMLDivElement) {
   return { root, queryClient };
 }
 
+const blockedViewProps = {
+  companyId: "company-1",
+  searchQuery: "",
+  agentNameById: new Map<string, string>(),
+  issueLinkState: null,
+  groupBy: "none" as const,
+  sortBy: "most_recent" as const,
+  issueFilters: defaultIssueFilterState,
+  currentUserId: "local-board",
+  liveIssueIds: new Set<string>(),
+  workspaceFilterContext: {},
+  showStatusColumn: true,
+  showIdentifierColumn: true,
+  showUpdatedColumn: true,
+};
+
 async function waitFor(predicate: () => boolean, attempts = 30): Promise<void> {
   for (let i = 0; i < attempts; i += 1) {
     if (predicate()) return;
@@ -137,10 +154,7 @@ describe("BlockedInboxView", () => {
     mockIssuesApi.list.mockResolvedValue([]);
     const { root } = renderWithClient(
       <BlockedInboxView
-        companyId="company-1"
-        searchQuery=""
-        agentNameById={new Map()}
-        issueLinkState={null}
+        {...blockedViewProps}
       />,
       container,
     );
@@ -149,7 +163,7 @@ describe("BlockedInboxView", () => {
     act(() => root.unmount());
   });
 
-  it("groups rows by reason variant and orders them by severity", async () => {
+  it("defaults to no grouping and orders rows by most recent stopped item first", async () => {
     const issues: Issue[] = [
       makeIssue(
         "issue-low",
@@ -195,36 +209,57 @@ describe("BlockedInboxView", () => {
 
     const { root } = renderWithClient(
       <BlockedInboxView
-        companyId="company-1"
-        searchQuery=""
+        {...blockedViewProps}
         agentNameById={new Map([["agent-1", "ClaudeCoder"]])}
-        issueLinkState={null}
       />,
       container,
     );
-    await waitFor(() =>
-      container.querySelectorAll('[data-testid^="blocked-inbox-group-"]').length > 0,
-    );
+    await waitFor(() => container.querySelectorAll("a").length === 4);
 
-    const groupHeaders = container.querySelectorAll('[data-testid^="blocked-inbox-group-"]');
-    const variants = Array.from(groupHeaders).map((el) =>
-      el.getAttribute("data-testid")?.replace("blocked-inbox-group-", ""),
-    );
-    expect(variants).toEqual(["needs_decision", "stalled", "external_wait"]);
+    expect(container.querySelectorAll('[data-testid^="blocked-inbox-group-"]')).toHaveLength(0);
 
-    const stalledGroup = container.querySelector('[data-testid="blocked-inbox-group-stalled"]')!;
-    const titles = Array.from(stalledGroup.querySelectorAll("a")).map((a) => a.textContent ?? "");
-    // Critical row should appear before high row.
-    const idx1 = titles.findIndex((t) => t.includes("Critical stalled row"));
-    const idx2 = titles.findIndex((t) => t.includes("Stalled chain row"));
-    expect(idx1).toBeGreaterThanOrEqual(0);
-    expect(idx2).toBeGreaterThan(idx1);
+    const titles = Array.from(container.querySelectorAll("a")).map((a) => a.textContent ?? "");
+    expect(titles[0]).toContain("Critical stalled row");
+    expect(titles[1]).toContain("Stalled chain row");
 
     expect(mockIssuesApi.list).toHaveBeenCalledWith("company-1", expect.objectContaining({
       attention: "blocked",
       includeBlockedInboxAttention: true,
       includeBlockedBy: true,
     }));
+
+    act(() => root.unmount());
+  });
+
+  it("places blocker reason chips with the title before owner and timestamp metadata", async () => {
+    mockIssuesApi.list.mockResolvedValue([
+      makeIssue(
+        "issue-decision",
+        "PAP-4",
+        "Pending board decision",
+        attention({
+          reason: "pending_board_decision",
+          severity: "medium",
+          owner: { type: "board", agentId: null, userId: null, label: "Board" },
+          action: { label: "Accept or reject", detail: null },
+        }),
+      ),
+    ]);
+
+    const { root } = renderWithClient(
+      <BlockedInboxView
+        {...blockedViewProps}
+      />,
+      container,
+    );
+    await waitFor(() => container.querySelector("a") !== null);
+
+    const rowText = container.querySelector("a")?.textContent ?? "";
+    expect(rowText.indexOf("Pending board decision")).toBeGreaterThanOrEqual(0);
+    expect(rowText.indexOf("Needs decision")).toBeGreaterThan(rowText.indexOf("Pending board decision"));
+    expect(rowText.indexOf("Board")).toBeGreaterThan(rowText.indexOf("Needs decision"));
+    expect(rowText).not.toContain("Accept or reject");
+    expect(container.querySelector('[data-testid="blocked-row-reason-column"]')?.textContent).toContain("Needs decision");
 
     act(() => root.unmount());
   });
@@ -256,10 +291,8 @@ describe("BlockedInboxView", () => {
 
     const { root } = renderWithClient(
       <BlockedInboxView
-        companyId="company-1"
+        {...blockedViewProps}
         searchQuery="charlie"
-        agentNameById={new Map()}
-        issueLinkState={null}
       />,
       container,
     );
@@ -278,10 +311,7 @@ describe("BlockedInboxView", () => {
 
     const { root } = renderWithClient(
       <BlockedInboxView
-        companyId="company-1"
-        searchQuery=""
-        agentNameById={new Map()}
-        issueLinkState={null}
+        {...blockedViewProps}
       />,
       container,
     );

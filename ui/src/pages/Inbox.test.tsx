@@ -261,7 +261,7 @@ describe("Inbox toolbar", () => {
     container.remove();
   });
 
-  it("hides general issue controls on the Blocked tab", async () => {
+  it("shows blocked toolbar controls on the Blocked tab", async () => {
     routerMock.location.pathname = "/inbox/blocked";
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0 } },
@@ -277,9 +277,11 @@ describe("Inbox toolbar", () => {
     });
 
     expect(container.querySelector('input[placeholder="Search inbox…"]')).not.toBeNull();
-    expect(container.querySelector('button[title="Filter"]')).toBeNull();
-    expect(container.querySelector('button[title="Group"]')).toBeNull();
-    expect(container.querySelector('button[title="Columns"]')).toBeNull();
+    expect(container.querySelector('[data-testid="inbox-blocked-tab-badge"]')).toBeNull();
+    expect(container.querySelector('button[title="Filter"]')).not.toBeNull();
+    expect(container.querySelector('button[title="Group"]')).not.toBeNull();
+    expect(container.querySelector('button[title="Columns"]')).not.toBeNull();
+    expect(container.querySelector('button[title="Sort"]')).not.toBeNull();
     expect(container.querySelector('button[title="Enable parent-child nesting"]')).toBeNull();
     expect(container.textContent).not.toContain("Mark all as read");
 

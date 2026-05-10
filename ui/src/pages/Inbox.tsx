@@ -13,6 +13,12 @@ import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
+import {
+  BLOCKED_GROUP_OPTIONS,
+  BLOCKED_SORT_OPTIONS,
+  type BlockedInboxGroupBy,
+  type BlockedInboxSort,
+} from "../lib/blockedInbox";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useGeneralSettings } from "../context/GeneralSettingsContext";
@@ -86,6 +92,7 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
+  ArrowUpDown,
   Layers,
   Plus,
   XCircle,
@@ -675,6 +682,8 @@ export function Inbox() {
     () => loadInboxFilterPreferences(selectedCompanyId),
   );
   const [groupBy, setGroupBy] = useState<InboxWorkItemGroupBy>(() => loadInboxWorkItemGroupBy());
+  const [blockedGroupBy, setBlockedGroupBy] = useState<BlockedInboxGroupBy>("none");
+  const [blockedSortBy, setBlockedSortBy] = useState<BlockedInboxSort>("most_recent");
   const [visibleIssueColumns, setVisibleIssueColumns] = useState<InboxIssueColumn[]>(loadInboxIssueColumns);
   const { dismissed: dismissedAlerts, dismiss: dismissAlert } = useDismissedInboxAlerts();
   const { dismissedAtByKey, dismiss: dismissInboxItem } = useInboxDismissals(selectedCompanyId);
@@ -829,13 +838,6 @@ export function Inbox() {
     queryFn: () => heartbeatsApi.list(selectedCompanyId!, undefined, INBOX_HEARTBEAT_RUN_LIMIT),
     enabled: !!selectedCompanyId,
   });
-  const { data: blockedAttentionCountResponse } = useQuery({
-    queryKey: queryKeys.issues.countBlockedAttention(selectedCompanyId!),
-    queryFn: () => issuesApi.count(selectedCompanyId!, { attention: "blocked" }),
-    enabled: !!selectedCompanyId,
-  });
-  const blockedAttentionCount = blockedAttentionCountResponse?.count ?? 0;
-
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
@@ -1959,22 +1961,7 @@ export function Inbox() {
                 label: "Recent",
               },
               { value: "unread", label: "Unread" },
-              {
-                value: "blocked",
-                label: (
-                  <span className="inline-flex items-center gap-1.5">
-                    Blocked
-                    {blockedAttentionCount > 0 ? (
-                      <span
-                        data-testid="inbox-blocked-tab-badge"
-                        className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-700 dark:text-amber-300"
-                      >
-                        {blockedAttentionCount > 99 ? "99+" : blockedAttentionCount}
-                      </span>
-                    ) : null}
-                  </span>
-                ),
-              },
+              { value: "blocked", label: "Blocked" },
               { value: "all", label: "All" },
             ]}
           />
@@ -2009,7 +1996,94 @@ export function Inbox() {
               data-page-search-target="true"
             />
           </div>
-          {showGeneralIssueToolbarControls ? (
+          {tab === "blocked" ? (
+            <>
+              <IssueFiltersPopover
+                state={issueFilters}
+                onChange={updateIssueFilters}
+                activeFilterCount={activeIssueFilterCount}
+                agents={agents}
+                creators={creatorOptions}
+                projects={projects?.map((project) => ({ id: project.id, name: project.name }))}
+                labels={labels?.map((label) => ({ id: label.id, name: label.name, color: label.color }))}
+                currentUserId={currentUserId}
+                enableRoutineVisibilityFilter
+                buttonVariant="outline"
+                iconOnly
+                workspaces={isolatedWorkspacesEnabled ? executionWorkspaces.filter((w) => w.mode === "isolated_workspace").map((w) => ({ id: w.id, name: w.name })) : undefined}
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className={cn("h-8 w-8 shrink-0", blockedGroupBy !== "none" && "bg-accent")}
+                    title="Group"
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-44 p-0">
+                  <div className="space-y-0.5 p-2">
+                    {BLOCKED_GROUP_OPTIONS.map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm",
+                          blockedGroupBy === value ? "bg-accent/50 text-foreground" : "text-muted-foreground hover:bg-accent/50",
+                        )}
+                        onClick={() => setBlockedGroupBy(value)}
+                      >
+                        <span>{label}</span>
+                        {blockedGroupBy === value ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <IssueColumnPicker
+                availableColumns={availableIssueColumns}
+                visibleColumnSet={visibleIssueColumnSet}
+                onToggleColumn={toggleIssueColumn}
+                onResetColumns={() => setIssueColumns(DEFAULT_INBOX_ISSUE_COLUMNS)}
+                title="Choose which inbox columns stay visible"
+                iconOnly
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    title="Sort"
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-48 p-0">
+                  <div className="space-y-0.5 p-2">
+                    {BLOCKED_SORT_OPTIONS.map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm",
+                          blockedSortBy === value ? "bg-accent/50 text-foreground" : "text-muted-foreground hover:bg-accent/50",
+                        )}
+                        onClick={() => setBlockedSortBy(value)}
+                      >
+                        <span>{label}</span>
+                        {blockedSortBy === value ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </>
+          ) : showGeneralIssueToolbarControls ? (
             <>
               <Button
                 type="button"
@@ -2170,6 +2244,15 @@ export function Inbox() {
           agentNameById={agentById}
           userLabelById={companyUserLabelMap}
           issueLinkState={issueLinkState}
+          groupBy={blockedGroupBy}
+          sortBy={blockedSortBy}
+          issueFilters={issueFilters}
+          currentUserId={currentUserId}
+          liveIssueIds={liveIssueIds}
+          workspaceFilterContext={inboxWorkspaceGrouping}
+          showStatusColumn={visibleIssueColumnSet.has("status") && availableIssueColumnSet.has("status")}
+          showIdentifierColumn={visibleIssueColumnSet.has("id") && availableIssueColumnSet.has("id")}
+          showUpdatedColumn={visibleIssueColumnSet.has("updated") && availableIssueColumnSet.has("updated")}
         />
       ) : null}
 
