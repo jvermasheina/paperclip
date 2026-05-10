@@ -124,7 +124,7 @@ describeEmbeddedPostgres("OAuth integration scenarios", () => {
           type: "board",
           userId: opts.userId,
           memberships: [
-            { companyId: req.params.companyId, role: "admin" },
+            { companyId: req.params.companyId, membershipRole: "admin" },
           ],
         };
         next();

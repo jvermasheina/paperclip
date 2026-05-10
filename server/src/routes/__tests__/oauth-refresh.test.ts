@@ -74,7 +74,7 @@ function makeApp(opts: MakeAppOptions = {}) {
       (req as unknown as { actor: unknown }).actor = {
         type: "board",
         userId: "u1",
-        memberships: [{ companyId: req.params.companyId, role: "admin" }],
+        memberships: [{ companyId: req.params.companyId, membershipRole: "admin" }],
       };
       next();
     },

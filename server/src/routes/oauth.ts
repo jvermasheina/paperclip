@@ -59,22 +59,60 @@ function summary(p: RegisteredProvider) {
   };
 }
 
+type ActorMembership = {
+  companyId: string;
+  membershipRole?: string | null;
+  status?: string;
+};
+
+const ADMIN_ROLES = new Set(["owner", "admin"]);
+
+function actorMembership(req: Request, companyId: string): ActorMembership | null {
+  const actor = (req as Request & {
+    actor?: { type: string; memberships?: ActorMembership[] };
+  }).actor;
+  if (!actor || actor.type !== "board") return null;
+  return (actor.memberships ?? []).find((m) => m.companyId === companyId) ?? null;
+}
+
 function ensureMember(req: Request, res: Response): boolean {
-  const actor = (req as Request & { actor?: { type: string; memberships?: Array<{ companyId: string }> } }).actor;
-  const companyId = req.params.companyId;
   // Whitelist (not blacklist) the legitimate human-admin actor type. The
   // OAuth admin routes are board-only; allowing any other actor (e.g. an
   // `agent` token without `memberships`) past the type check would let it
   // reach the membership lookup and surface a 404 — leaking resource
   // existence — instead of being rejected with 401. Be strict here.
+  const actor = (req as Request & { actor?: { type: string } }).actor;
   if (!actor || actor.type !== "board") {
     res.status(401).json({ errorCode: "unauthenticated" });
     return false;
   }
-  const ok = (actor.memberships ?? []).some((m) => m.companyId === companyId);
-  if (!ok) {
+  const companyId = (req.params as unknown as { companyId: string }).companyId;
+  if (!actorMembership(req, companyId)) {
     // 404 not 403, per spec 9.8
     res.status(404).end();
+    return false;
+  }
+  return true;
+}
+
+// Like `ensureMember` but additionally requires the caller is an admin/owner
+// of the company. Used by routes that mutate state (initiate connect,
+// disconnect, manual refresh) — the UI hides these from non-admins, but the
+// server is the source of truth.
+function ensureCompanyAdmin(req: Request, res: Response): boolean {
+  const actor = (req as Request & { actor?: { type: string } }).actor;
+  if (!actor || actor.type !== "board") {
+    res.status(401).json({ errorCode: "unauthenticated" });
+    return false;
+  }
+  const companyId = (req.params as unknown as { companyId: string }).companyId;
+  const membership = actorMembership(req, companyId);
+  if (!membership) {
+    res.status(404).end();
+    return false;
+  }
+  if (!ADMIN_ROLES.has(String(membership.membershipRole ?? ""))) {
+    res.status(403).json({ errorCode: "forbidden" });
     return false;
   }
   return true;
@@ -99,7 +137,7 @@ export function oauthRoutes(deps: OAuthRouteDeps): Router {
   });
 
   r.post("/connect/:providerId", async (req, res) => {
-    if (!ensureMember(req, res)) return;
+    if (!ensureCompanyAdmin(req, res)) return;
     const provider = deps.registry.get(req.params.providerId);
     if (!provider) {
       res.status(404).json({ errorCode: "provider_not_found" });
@@ -200,7 +238,7 @@ export function oauthRoutes(deps: OAuthRouteDeps): Router {
   });
 
   r.post("/connections/:id/refresh", async (req, res) => {
-    if (!ensureMember(req, res)) return;
+    if (!ensureCompanyAdmin(req, res)) return;
     const companyId = (req.params as unknown as { companyId: string; id: string }).companyId;
     const conn = await deps.db.query.oauthConnections.findFirst({
       where: and(
@@ -272,7 +310,7 @@ export function oauthRoutes(deps: OAuthRouteDeps): Router {
   });
 
   r.delete("/connections/:id", async (req, res) => {
-    if (!ensureMember(req, res)) return;
+    if (!ensureCompanyAdmin(req, res)) return;
     const companyId = (req.params as unknown as { companyId: string; id: string }).companyId;
     const row = await deps.db.query.oauthConnections.findFirst({
       where: and(

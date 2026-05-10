@@ -10,7 +10,7 @@ vi.mock("../../oauth/revoke.js", () => ({
 
 import { revokeUpstreamToken } from "../../oauth/revoke.js";
 
-function makeApp({ revokeFails = false } = {}) {
+function makeApp({ revokeFails = false, membershipRole = "admin" }: { revokeFails?: boolean; membershipRole?: string } = {}) {
   vi.mocked(revokeUpstreamToken).mockReset();
   vi.mocked(revokeUpstreamToken).mockImplementation(() =>
     revokeFails ? Promise.reject(new Error("rev fail")) : Promise.resolve(),
@@ -81,7 +81,7 @@ function makeApp({ revokeFails = false } = {}) {
         type: "board",
         userId: "u1",
         memberships: [
-          { companyId: req.params.companyId, membershipRole: "admin" },
+          { companyId: req.params.companyId, membershipRole },
         ],
       };
       next();
@@ -118,5 +118,12 @@ describe("DELETE /connections/:id", () => {
     const res = await request(app).delete("/api/companies/c1/oauth/connections/c");
     expect(res.status).toBe(204);
     expect(vi.mocked(revokeUpstreamToken)).toHaveBeenCalled();
+  });
+
+  it("returns 403 for a member without admin/owner role", async () => {
+    const { app } = makeApp({ membershipRole: "member" });
+    const res = await request(app).delete("/api/companies/c1/oauth/connections/c");
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ errorCode: "forbidden" });
   });
 });

@@ -166,7 +166,7 @@ describeEmbeddedPostgres("Security: cross-tenant isolation", () => {
           type: "board",
           userId: opts.userId,
           memberships: [
-            { companyId: opts.actorCompanyId, role: "admin" },
+            { companyId: opts.actorCompanyId, membershipRole: "admin" },
           ],
         };
         next();
@@ -339,7 +339,7 @@ describe("Security: scope escalation rejected", () => {
         (req as any).actor = {
           type: "board",
           userId: "u1",
-          memberships: [{ companyId: req.params.companyId, role: "admin" }],
+          memberships: [{ companyId: req.params.companyId, membershipRole: "admin" }],
         };
         next();
       },
@@ -425,7 +425,7 @@ describe("Security: state-row flooding", () => {
         (req as any).actor = {
           type: "board",
           userId: "u1",
-          memberships: [{ companyId: req.params.companyId, role: "admin" }],
+          memberships: [{ companyId: req.params.companyId, membershipRole: "admin" }],
         };
         next();
       },
@@ -496,7 +496,7 @@ describe("Security: state-row flooding", () => {
         (req as any).actor = {
           type: "board",
           userId: "u1",
-          memberships: [{ companyId: req.params.companyId, role: "admin" }],
+          memberships: [{ companyId: req.params.companyId, membershipRole: "admin" }],
         };
         next();
       },
