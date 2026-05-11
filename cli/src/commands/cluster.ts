@@ -70,7 +70,9 @@ export interface ClusterConnectionsService {
   get(id: string): Promise<ClusterConnectionRow | null>;
   delete(id: string): Promise<void>;
   resolve(id: string): Promise<ResolvedClusterConnection | null>;
-  update(id: string, input: { imageAllowlist?: string[] }): Promise<ClusterConnectionRow>;
+  // Returns null when the id does not match a row (so the CLI's
+  // not-found guard in cmdSetImageAllowlist actually narrows the type).
+  update(id: string, input: { imageAllowlist?: string[] }): Promise<ClusterConnectionRow | null>;
 }
 
 export interface TenantPolicy {
