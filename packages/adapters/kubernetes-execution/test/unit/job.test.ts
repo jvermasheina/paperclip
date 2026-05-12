@@ -17,6 +17,7 @@ const baseInput = {
   workspaceStrategyJson: '{"kind":"git-clone","url":"https://github.com/acme/repo.git","ref":"main"}',
   runtimeCommandSecretKey: "PAPERCLIP_RUNTIME_COMMAND_JSON",
   paperclipPublicUrl: "https://paperclip.example.com",
+  enablePodFailurePolicy: true,
 };
 
 describe("buildAgentJob", () => {
@@ -73,5 +74,10 @@ describe("buildAgentJob", () => {
   it("emits an imagePullSecrets entry when supplied", () => {
     const job = buildAgentJob(baseInput);
     expect(job.spec?.template.spec?.imagePullSecrets).toEqual([{ name: "paperclip-image-pull" }]);
+  });
+
+  it("omits podFailurePolicy unless explicitly enabled", () => {
+    const job = buildAgentJob({ ...baseInput, enablePodFailurePolicy: false });
+    expect(job.spec?.podFailurePolicy).toBeUndefined();
   });
 });

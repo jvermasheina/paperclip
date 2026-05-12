@@ -86,6 +86,8 @@ export interface ResolvedRunContext {
   storageClassName?: string;
   /** Strategy key tag for the PVC annotation. Free-form. */
   workspaceStrategyKey: string;
+  /** Emit Job podFailurePolicy only for clusters known to support it. */
+  enablePodFailurePolicy?: boolean;
 }
 
 export type EnsureTenantDriverInput = Omit<EnsureTenantInput, "connection"> & {
@@ -392,7 +394,7 @@ export function createKubernetesExecutionDriver(deps: KubernetesDriverDeps): Kub
           companyId: ctx.agent.companyId,
           companySlug: runContext.companySlug,
           adapterType: ctx.agent.adapterType ?? "unknown",
-          image: target.imageOverride ?? runContext.image,
+          image: runContext.image,
           initImage: runContext.initImage,
           imagePullSecrets: runContext.imagePullSecrets,
           pvcName: pvc.metadata!.name!,
@@ -404,6 +406,7 @@ export function createKubernetesExecutionDriver(deps: KubernetesDriverDeps): Kub
           runtimeCommandSecretKey: RUNTIME_COMMAND_SECRET_KEY,
           paperclipPublicUrl: runContext.paperclipPublicUrl,
           traceparent: runContext.traceparent,
+          enablePodFailurePolicy: runContext.enablePodFailurePolicy,
         });
 
         const created = await createAgentJob(client, job);

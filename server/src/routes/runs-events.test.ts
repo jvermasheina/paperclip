@@ -19,15 +19,17 @@ describe("POST /api/runs/:runId/events", () => {
   it("appends an event when JWT runId matches URL runId", async () => {
     const d = deps();
     const handler = createRunsEventsRoute(d);
+    const ts = new Date().toISOString();
     const res = await handler({
       params: { runId: "r-1" },
       headers: { authorization: "Bearer fake.jwt" },
-      body: { type: "assistant", ts: "2026-05-09T00:00:00Z", text: "hello" },
+      body: { type: "assistant", ts, text: "hello" },
     });
     expect(res.status).toBe(204);
     expect(d.appendRunEvent).toHaveBeenCalledWith(expect.objectContaining({
       runId: "r-1",
       type: "assistant",
+      ts,
     }));
   });
 
@@ -66,6 +68,32 @@ describe("POST /api/runs/:runId/events", () => {
       body: { type: "assistant", text: "x".repeat(33 * 1024) },
     });
     expect(res.status).toBe(413);
+    expect(d.appendRunEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid event timestamps", async () => {
+    const d = deps();
+    const handler = createRunsEventsRoute(d);
+    const res = await handler({
+      params: { runId: "r-1" },
+      headers: { authorization: "Bearer fake.jwt" },
+      body: { type: "assistant", ts: "not-a-date" },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("invalid_event_timestamp");
+    expect(d.appendRunEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects event timestamps outside the skew window", async () => {
+    const d = deps();
+    const handler = createRunsEventsRoute(d);
+    const res = await handler({
+      params: { runId: "r-1" },
+      headers: { authorization: "Bearer fake.jwt" },
+      body: { type: "assistant", ts: "2000-01-01T00:00:00.000Z" },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("invalid_event_timestamp");
     expect(d.appendRunEvent).not.toHaveBeenCalled();
   });
 });

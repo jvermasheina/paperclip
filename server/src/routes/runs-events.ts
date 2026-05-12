@@ -24,9 +24,19 @@ export interface RouteResponse {
 }
 
 const MAX_RUN_EVENT_PAYLOAD_BYTES = 32 * 1024;
+const MAX_RUN_EVENT_TIMESTAMP_SKEW_MS = 24 * 60 * 60 * 1000;
 
 function jsonByteLength(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function parseEventTimestamp(input: unknown, now = new Date()): string | null {
+  if (input === undefined) return now.toISOString();
+  if (typeof input !== "string") return null;
+  const parsedMs = Date.parse(input);
+  if (!Number.isFinite(parsedMs)) return null;
+  if (Math.abs(parsedMs - now.getTime()) > MAX_RUN_EVENT_TIMESTAMP_SKEW_MS) return null;
+  return new Date(parsedMs).toISOString();
 }
 
 export function createRunsEventsRoute(deps: RunsEventsDeps) {
@@ -44,10 +54,14 @@ export function createRunsEventsRoute(deps: RunsEventsDeps) {
     if (jsonByteLength(req.body) > MAX_RUN_EVENT_PAYLOAD_BYTES) {
       return { status: 413, body: { error: "payload_too_large", maxBytes: MAX_RUN_EVENT_PAYLOAD_BYTES } };
     }
+    const ts = parseEventTimestamp(req.body.ts);
+    if (!ts) {
+      return { status: 400, body: { error: "invalid_event_timestamp" } };
+    }
     await deps.appendRunEvent({
       runId: v.claims.runId,
       type: req.body.type,
-      ts: typeof req.body.ts === "string" ? req.body.ts : new Date().toISOString(),
+      ts,
       payload: req.body,
     });
     return { status: 204 };

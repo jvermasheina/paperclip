@@ -660,9 +660,10 @@ export async function startServer(): Promise<StartedServer> {
         .replace(/^-+|-+$/g, "")
         .slice(0, 32) || "company";
       const imageRegistry = connection.imageRegistry?.replace(/\/+$/, "") ?? "ghcr.io/paperclipai";
+      const defaultImage = `${imageRegistry}/agent-runtime-claude:v1`;
       return {
         companySlug,
-        image: target.imageOverride ?? `${imageRegistry}/agent-runtime-claude:v1`,
+        image: connection.allowAgentImageOverride && target.imageOverride ? target.imageOverride : defaultImage,
         initImage: `${imageRegistry}/agent-runtime-base:v1`,
         paperclipPublicUrl: connection.paperclipPublicUrl ?? process.env.PAPERCLIP_API_URL ?? "",
         workspaceStrategyJson: buildAdapterManagedWorkspaceRequestJson(),

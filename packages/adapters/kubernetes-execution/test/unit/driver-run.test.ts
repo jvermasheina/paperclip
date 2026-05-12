@@ -335,4 +335,33 @@ describe("KubernetesExecutionDriver.run()", () => {
       expect(chunk).not.toContain("bst_super_secret_value_long_enough");
     }
   });
+
+  it("uses the resolved run-context image instead of target.imageOverride", async () => {
+    const scenario: JobScenario = {
+      jobs: [{ metadata: { name: "j" }, status: { succeeded: 1 } } as V1Job],
+      pod: {
+        metadata: { name: "pod-x" },
+        status: { containerStatuses: [{ name: "agent", state: { terminated: { exitCode: 0 } } }] },
+      } as V1Pod,
+    };
+    const { client, calls } = buildFakeClient(scenario);
+    installFakeApiClient(client);
+
+    const driver = createKubernetesExecutionDriver({
+      resolveConnection: async () => sampleConnection,
+      bootstrapTokenMinter: {
+        mint: async () => ({ token: "bst_x", expiresAt: new Date(Date.now() + 600_000) }),
+      },
+      resolveRunContext: async () => baseRunContext,
+      pollIntervalMs: 5,
+    });
+
+    await driver.run({
+      ctx: makeCtx(),
+      target: { ...target, imageOverride: "ghcr.io/acme/untrusted-agent:latest" },
+    });
+
+    const main = calls.createdJob?.spec?.template.spec?.containers.find((c) => c.name === "agent");
+    expect(main?.image).toBe(baseRunContext.image);
+  });
 });

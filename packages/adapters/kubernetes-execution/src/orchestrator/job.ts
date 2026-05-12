@@ -34,6 +34,8 @@ export interface BuildJobInput {
   paperclipPublicUrl: string;
   /** Trace context propagated into the pod. */
   traceparent?: string;
+  /** PodFailurePolicy requires Kubernetes 1.26+ with the gate enabled. */
+  enablePodFailurePolicy?: boolean;
 }
 
 export function buildAgentJob(input: BuildJobInput): V1Job {
@@ -121,6 +123,15 @@ export function buildAgentJob(input: BuildJobInput): V1Job {
     securityContext: containerSecurity,
   };
 
+  const podFailurePolicy = input.enablePodFailurePolicy
+    ? {
+        rules: [
+          { action: "FailJob", onPodConditions: [{ type: "PodHasNetwork", status: "False" }] },
+          { action: "FailJob", onExitCodes: { containerName: "agent", operator: "In", values: [137] } },
+        ],
+      }
+    : undefined;
+
   return {
     apiVersion: "batch/v1",
     kind: "Job",
@@ -135,12 +146,7 @@ export function buildAgentJob(input: BuildJobInput): V1Job {
       activeDeadlineSeconds: input.activeDeadlineSeconds,
       completions: 1,
       parallelism: 1,
-      podFailurePolicy: {
-        rules: [
-          { action: "FailJob", onPodConditions: [{ type: "PodHasNetwork", status: "False" }] },
-          { action: "FailJob", onExitCodes: { containerName: "agent", operator: "In", values: [137] } },
-        ],
-      },
+      ...(podFailurePolicy ? { podFailurePolicy } : {}),
       template: {
         metadata: {
           labels,
