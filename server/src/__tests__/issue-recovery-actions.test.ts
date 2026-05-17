@@ -571,6 +571,48 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     );
   });
 
+  it("resolves an active recovery action by returning the source issue to todo", async () => {
+    const { companyId, managerId, sourceIssueId } = await seedCompany();
+    await db.update(issues).set({ status: "blocked" }).where(eq(issues.id, sourceIssueId));
+    const recoveryActionSvc = issueRecoveryActionService(db);
+    const action = await recoveryActionSvc.upsertSourceScoped({
+      companyId,
+      sourceIssueId,
+      kind: "issue_graph_liveness",
+      ownerType: "agent",
+      ownerAgentId: managerId,
+      cause: "issue_graph_liveness",
+      fingerprint: "graph-liveness:try-again",
+      evidence: { latestIssueStatus: "blocked" },
+      nextAction: "Restore a live execution path.",
+      wakePolicy: { type: "manual" },
+    });
+    const app = createApp();
+
+    const resolved = await request(app)
+      .post(`/api/issues/${sourceIssueId}/recovery-actions/resolve`)
+      .send({
+        actionId: action.id,
+        outcome: "restored",
+        sourceIssueStatus: "todo",
+        resolutionNote: "Try the source issue again.",
+      })
+      .expect(200);
+
+    expect(resolved.body.issue).toMatchObject({
+      id: sourceIssueId,
+      status: "todo",
+      activeRecoveryAction: null,
+    });
+    expect(resolved.body.recoveryAction).toMatchObject({
+      id: action.id,
+      status: "resolved",
+      outcome: "restored",
+      resolutionNote: "Try the source issue again.",
+    });
+    expect(await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId)).toBeNull();
+  });
+
   it("marks a recovery action stale when a blocked source issue is manually moved to todo", async () => {
     const { companyId, managerId, sourceIssueId } = await seedCompany();
     await db

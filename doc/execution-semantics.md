@@ -184,7 +184,7 @@ A valid recovery action must name:
 - the wake, monitor, timeout, retry, or escalation policy that will move the action forward
 - the resolution outcome when closed, such as restored, delegated, false positive, blocked, escalated, or cancelled
 
-A source-scoped recovery action is the default form. Use it when the next safe move is to repair the source issue's liveness directly: restore a wake path, clarify disposition, re-establish a monitor, record a false positive, or delegate real follow-up work from the source issue.
+A source-scoped recovery action is the default form. Use it when the next safe move is to repair the source issue's liveness directly: move the source issue back to `todo` so it can be retried, clarify disposition, re-establish a monitor, record a false positive, or delegate real follow-up work from the source issue.
 
 Use an issue-backed recovery action only when the recovery is genuinely independent work or when source-scoped handling would be unsafe or unclear. Examples include:
 
