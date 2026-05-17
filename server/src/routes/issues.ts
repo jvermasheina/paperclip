@@ -1033,6 +1033,20 @@ export function issueRoutes(
     }
   }
 
+  async function revalidateActiveSourceRecoveryAfterCommittedWrite(
+    input: Parameters<typeof revalidateActiveSourceRecovery>[0],
+  ) {
+    try {
+      return await revalidateActiveSourceRecovery(input);
+    } catch (err) {
+      logger.warn(
+        { err, issueId: input.issue.id, trigger: input.trigger },
+        "failed to revalidate recovery action after committed issue write",
+      );
+      return input.activeRecoveryAction ?? null;
+    }
+  }
+
   function withContentPath<T extends { id: string }>(attachment: T) {
     return {
       ...attachment,
@@ -2349,7 +2363,7 @@ export function issueRoutes(
       });
     }
 
-    await revalidateActiveSourceRecovery({
+    await revalidateActiveSourceRecoveryAfterCommittedWrite({
       issue,
       trigger: "document",
       actor,
@@ -2543,7 +2557,7 @@ export function issueRoutes(
         source: "issue.document_restored",
       });
 
-      await revalidateActiveSourceRecovery({
+      await revalidateActiveSourceRecoveryAfterCommittedWrite({
         issue,
         trigger: "document",
         actor,
@@ -2620,7 +2634,7 @@ export function issueRoutes(
       actor,
       source: "issue.document_deleted",
     });
-    await revalidateActiveSourceRecovery({
+    await revalidateActiveSourceRecoveryAfterCommittedWrite({
       issue,
       trigger: "document",
       actor,
@@ -2658,7 +2672,7 @@ export function issueRoutes(
       entityId: issue.id,
       details: { workProductId: product.id, type: product.type, provider: product.provider },
     });
-    await revalidateActiveSourceRecovery({
+    await revalidateActiveSourceRecoveryAfterCommittedWrite({
       issue,
       trigger: "work_product",
       actor,
@@ -2698,7 +2712,7 @@ export function issueRoutes(
       entityId: existing.issueId,
       details: { workProductId: product.id, changedKeys: Object.keys(req.body).sort() },
     });
-    await revalidateActiveSourceRecovery({
+    await revalidateActiveSourceRecoveryAfterCommittedWrite({
       issue,
       trigger: "work_product",
       actor,
@@ -2738,7 +2752,7 @@ export function issueRoutes(
       entityId: existing.issueId,
       details: { workProductId: removed.id, type: removed.type },
     });
-    await revalidateActiveSourceRecovery({
+    await revalidateActiveSourceRecoveryAfterCommittedWrite({
       issue,
       trigger: "work_product",
       actor,

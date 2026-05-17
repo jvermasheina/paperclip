@@ -449,6 +449,25 @@ describe("agent issue mutation checkout ownership", () => {
     );
   });
 
+  it("preserves committed document and work product writes when recovery revalidation fails", async () => {
+    const app = await createApp(ownerActor());
+
+    mockIssueRecoveryActionService.getActiveForIssue.mockRejectedValueOnce(new Error("revalidation read failed"));
+    await request(app)
+      .put(`/api/issues/${issueId}/documents/plan`)
+      .send({ format: "markdown", body: "# updated" })
+      .expect(200);
+
+    mockIssueRecoveryActionService.getActiveForIssue.mockRejectedValueOnce(new Error("revalidation read failed"));
+    await request(app)
+      .patch("/api/work-products/product-1")
+      .send({ title: "Updated product" })
+      .expect(200);
+
+    expect(mockDocumentService.upsertIssueDocument).toHaveBeenCalled();
+    expect(mockWorkProductService.update).toHaveBeenCalledWith("product-1", { title: "Updated product" });
+  });
+
   it("preserves board mutations on active checkouts", async () => {
     const app = await createApp(boardActor());
 
