@@ -21,6 +21,16 @@ const mockInstanceSettingsApi = vi.hoisted(() => ({
   getExperimental: vi.fn(),
 }));
 const mockSetBreadcrumbs = vi.hoisted(() => vi.fn());
+const mockCompanyState = vi.hoisted(() => ({
+  selectedCompany: { id: "company-1", name: "Paperclip", issuePrefix: "PAP" } as
+    | { id: string; name: string; issuePrefix: string | null }
+    | null,
+  selectedCompanyId: "company-1" as string | null,
+}));
+const mockLocationState = vi.hoisted(() => ({
+  pathname: "/PAP/company/settings/cloud-upstream",
+  search: "",
+}));
 
 vi.mock("@/api/cloudUpstreams", () => ({
   cloudUpstreamsApi: mockCloudUpstreamsApi,
@@ -38,8 +48,8 @@ vi.mock("@/context/BreadcrumbContext", () => ({
 
 vi.mock("@/context/CompanyContext", () => ({
   useCompany: () => ({
-    selectedCompany: { id: "company-1", name: "Paperclip", issuePrefix: "PAP" },
-    selectedCompanyId: "company-1",
+    selectedCompany: mockCompanyState.selectedCompany,
+    selectedCompanyId: mockCompanyState.selectedCompanyId,
   }),
 }));
 
@@ -49,7 +59,7 @@ vi.mock("@/lib/router", () => ({
       {children}
     </a>
   ),
-  useLocation: () => ({ search: "" }),
+  useLocation: () => ({ pathname: mockLocationState.pathname, search: mockLocationState.search }),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,6 +78,10 @@ describe("CloudUpstream", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
+    mockCompanyState.selectedCompany = { id: "company-1", name: "Paperclip", issuePrefix: "PAP" };
+    mockCompanyState.selectedCompanyId = "company-1";
+    mockLocationState.pathname = "/PAP/company/settings/cloud-upstream";
+    mockLocationState.search = "";
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableCloudSync: true });
     mockCloudUpstreamsApi.list.mockResolvedValue(stateWithRun(buildRun({ status: "succeeded" })));
     mockCloudUpstreamsApi.activateEntities.mockImplementation((_connectionId, _runId, input) =>
@@ -182,6 +196,68 @@ describe("CloudUpstream", () => {
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it("uses the URL pathname prefix when cleaning up the callback URL with no company context", async () => {
+    mockCompanyState.selectedCompany = null;
+    mockCompanyState.selectedCompanyId = null;
+    mockLocationState.pathname = "/PAP/company/settings/cloud-upstream";
+    mockLocationState.search = "?code=cb-code&state=cb-state";
+    mockCloudUpstreamsApi.list.mockResolvedValue({ connections: [], runs: [] });
+    mockCloudUpstreamsApi.finishConnect.mockResolvedValue({
+      id: "connection-1",
+      companyId: "company-1",
+      remoteUrl: "https://cloud.example/PAP",
+      target: {
+        stackId: "stack-1",
+        stackSlug: "stack",
+        stackDisplayName: "Paperclip Cloud",
+        companyId: "cloud-company-1",
+        primaryHost: "cloud.example",
+        origin: "https://cloud.example",
+        product: "Paperclip Cloud",
+        schemaMajor: 1,
+        maxChunkBytes: 1024,
+      },
+      tokenStatus: "connected",
+      scopes: ["upstream_import:write"],
+      authorizedGlobalUserId: "user-1",
+      expiresAt: null,
+      createdAt: "2026-05-18T18:00:00.000Z",
+      updatedAt: "2026-05-18T18:00:00.000Z",
+      lastRunId: null,
+    });
+    window.localStorage.setItem("paperclip-cloud-upstream-pending-connection", "pending-1");
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+
+    try {
+      const root = createRoot(container);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      await act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <CloudUpstream />
+          </QueryClientProvider>,
+        );
+      });
+      await flushReact();
+      await flushReact();
+
+      expect(mockCloudUpstreamsApi.finishConnect).toHaveBeenCalledWith({
+        pendingConnectionId: "pending-1",
+        code: "cb-code",
+        state: "cb-state",
+      });
+      expect(replaceStateSpy).toHaveBeenCalledWith(null, "", "/PAP/company/settings/cloud-upstream");
+
+      await act(async () => {
+        root.unmount();
+      });
+    } finally {
+      replaceStateSpy.mockRestore();
+      window.localStorage.removeItem("paperclip-cloud-upstream-pending-connection");
+    }
   });
 
   it("keeps retry only for failed or cancelled runs", async () => {

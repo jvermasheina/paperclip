@@ -24,7 +24,7 @@ import { cloudUpstreamsApi } from "@/api/cloudUpstreams";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useCompany } from "@/context/CompanyContext";
-import { applyCompanyPrefix } from "@/lib/company-routes";
+import { applyCompanyPrefix, extractCompanyPrefixFromPath } from "@/lib/company-routes";
 import { Link, useLocation } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -102,7 +102,10 @@ export function CloudUpstream() {
   const state = callbackParams.get("state");
   const callbackError = callbackParams.get("error");
 
-  const settingsPath = applyCompanyPrefix("/company/settings/cloud-upstream", selectedCompany?.issuePrefix ?? null);
+  const settingsPath = useMemo(() => {
+    const pathPrefix = extractCompanyPrefixFromPath(location.pathname);
+    return applyCompanyPrefix("/company/settings/cloud-upstream", pathPrefix ?? selectedCompany?.issuePrefix ?? null);
+  }, [location.pathname, selectedCompany?.issuePrefix]);
 
   const finishMutation = useMutation({
     mutationFn: (input: { pendingConnectionId: string; code: string; state: string }) =>
