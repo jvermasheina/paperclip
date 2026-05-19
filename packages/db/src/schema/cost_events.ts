@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, index, jsonb } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { issues } from "./issues.js";
@@ -25,6 +25,8 @@ export const costEvents = pgTable(
     cachedInputTokens: integer("cached_input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
     costCents: integer("cost_cents").notNull(),
+    costSource: text("cost_source").notNull().default("unavailable"),
+    costMetadata: jsonb("cost_metadata").$type<Record<string, unknown> | null>(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

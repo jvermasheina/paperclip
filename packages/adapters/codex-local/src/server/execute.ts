@@ -813,10 +813,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       biller: resolveCodexBiller(billingEnv, billingType),
       model,
       billingType,
-      costUsd: null,
+      costUsd: attempt.parsed.costUsd,
+      costSource: attempt.parsed.costUsd != null ? "reported" : null,
+      costMetadata: attempt.parsed.costUsd != null
+        ? {
+            providerCostField: attempt.parsed.costField,
+            source: "codex_jsonl",
+          }
+        : null,
       resultJson: {
         stdout: attempt.proc.stdout,
         stderr: attempt.proc.stderr,
+        ...(attempt.parsed.costUsd != null ? { costUsd: attempt.parsed.costUsd, costField: attempt.parsed.costField } : {}),
         ...(transientUpstream ? { errorFamily: "transient_upstream" } : {}),
         ...(transientRetryNotBefore ? { retryNotBefore: transientRetryNotBefore.toISOString() } : {}),
         ...(transientRetryNotBefore ? { transientRetryNotBefore: transientRetryNotBefore.toISOString() } : {}),

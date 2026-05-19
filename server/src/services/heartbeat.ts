@@ -61,6 +61,7 @@ import type {
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithByteCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
+import { resolveCostProvenance } from "./openai-cost-estimates.js";
 import { trackAgentFirstHeartbeat } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
 import { companySkillService } from "./company-skills.js";
@@ -1031,6 +1032,7 @@ type UsageTotals = {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens: number;
 };
 
 type SessionCompactionDecision = {
@@ -1443,6 +1445,7 @@ function normalizeUsageTotals(usage: UsageSummary | null | undefined): UsageTota
     inputTokens: Math.max(0, Math.floor(asNumber(usage.inputTokens, 0))),
     cachedInputTokens: Math.max(0, Math.floor(asNumber(usage.cachedInputTokens, 0))),
     outputTokens: Math.max(0, Math.floor(asNumber(usage.outputTokens, 0))),
+    reasoningOutputTokens: Math.max(0, Math.floor(asNumber(usage.reasoningOutputTokens, 0))),
   };
 }
 
@@ -1462,8 +1465,12 @@ function readRawUsageTotals(usageJson: unknown): UsageTotals | null {
     0,
     Math.floor(asNumber(parsed.rawOutputTokens, asNumber(parsed.outputTokens, 0))),
   );
+  const reasoningOutputTokens = Math.max(
+    0,
+    Math.floor(asNumber(parsed.rawReasoningOutputTokens, asNumber(parsed.reasoningOutputTokens, 0))),
+  );
 
-  if (inputTokens <= 0 && cachedInputTokens <= 0 && outputTokens <= 0) {
+  if (inputTokens <= 0 && cachedInputTokens <= 0 && outputTokens <= 0 && reasoningOutputTokens <= 0) {
     return null;
   }
 
@@ -1471,6 +1478,7 @@ function readRawUsageTotals(usageJson: unknown): UsageTotals | null {
     inputTokens,
     cachedInputTokens,
     outputTokens,
+    reasoningOutputTokens,
   };
 }
 
@@ -1487,11 +1495,15 @@ function deriveNormalizedUsageDelta(current: UsageTotals | null, previous: Usage
   const outputTokens = current.outputTokens >= previous.outputTokens
     ? current.outputTokens - previous.outputTokens
     : current.outputTokens;
+  const reasoningOutputTokens = current.reasoningOutputTokens >= previous.reasoningOutputTokens
+    ? current.reasoningOutputTokens - previous.reasoningOutputTokens
+    : current.reasoningOutputTokens;
 
   return {
     inputTokens: Math.max(0, inputTokens),
     cachedInputTokens: Math.max(0, cachedInputTokens),
     outputTokens: Math.max(0, outputTokens),
+    reasoningOutputTokens: Math.max(0, reasoningOutputTokens),
   };
 }
 
@@ -6761,11 +6773,26 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const inputTokens = usage?.inputTokens ?? 0;
     const outputTokens = usage?.outputTokens ?? 0;
     const cachedInputTokens = usage?.cachedInputTokens ?? 0;
+    const reasoningOutputTokens = usage?.reasoningOutputTokens ?? 0;
     const billingType = normalizeLedgerBillingType(result.billingType);
-    const additionalCostCents = normalizeBilledCostCents(result.costUsd, billingType);
-    const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0;
     const provider = result.provider ?? "unknown";
     const biller = resolveLedgerBiller(result);
+    const costProvenance = resolveCostProvenance({
+      ...result,
+      provider,
+      biller,
+      billingType,
+      usage: usage
+        ? {
+            inputTokens,
+            cachedInputTokens,
+            outputTokens,
+            reasoningOutputTokens,
+          }
+        : result.usage,
+    });
+    const additionalCostCents = normalizeBilledCostCents(costProvenance.costUsd, billingType);
+    const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0 || reasoningOutputTokens > 0;
     const ledgerScope = await resolveLedgerScopeForRun(db, agent.companyId, run);
 
     await db
@@ -6799,6 +6826,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         cachedInputTokens,
         outputTokens,
         costCents: additionalCostCents,
+        costSource: costProvenance.costSource,
+        costMetadata: {
+          ...costProvenance.costMetadata,
+          ...(reasoningOutputTokens > 0 ? { reasoningOutputTokens } : {}),
+        },
         occurredAt: new Date(),
       });
     }
@@ -7926,6 +7958,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
                 rawInputTokens: rawUsage.inputTokens,
                 rawCachedInputTokens: rawUsage.cachedInputTokens,
                 rawOutputTokens: rawUsage.outputTokens,
+                rawReasoningOutputTokens: rawUsage.reasoningOutputTokens,
               } : {}),
               ...(sessionUsageResolution.derivedFromSessionTotals ? { usageSource: "session_delta" } : {}),
               ...((nextSessionState.displayId ?? nextSessionState.legacySessionId)
@@ -7940,6 +7973,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
               biller: resolveLedgerBiller(adapterResult),
               model: readNonEmptyString(adapterResult.model) ?? "unknown",
               ...(adapterResult.costUsd != null ? { costUsd: adapterResult.costUsd } : {}),
+              ...(adapterResult.costSource ? { costSource: adapterResult.costSource } : {}),
+              ...(adapterResult.costMetadata ? { costMetadata: adapterResult.costMetadata } : {}),
               billingType: normalizeLedgerBillingType(adapterResult.billingType),
             } as Record<string, unknown>)
           : null;

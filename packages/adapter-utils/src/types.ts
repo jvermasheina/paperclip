@@ -31,6 +31,7 @@ export interface UsageSummary {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  reasoningOutputTokens?: number;
 }
 
 export type AdapterBillingType =
@@ -87,6 +88,8 @@ export interface AdapterExecutionResult {
   model?: string | null;
   billingType?: AdapterBillingType | null;
   costUsd?: number | null;
+  costSource?: "reported" | "estimated" | "unavailable" | null;
+  costMetadata?: Record<string, unknown> | null;
   resultJson?: Record<string, unknown> | null;
   runtimeServices?: AdapterRuntimeServiceReport[];
   summary?: string | null;

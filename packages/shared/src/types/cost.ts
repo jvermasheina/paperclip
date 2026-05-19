@@ -1,5 +1,7 @@
 import type { BillingType } from "../constants.js";
 
+export type CostSource = "reported" | "estimated" | "unavailable";
+
 export interface CostEvent {
   id: string;
   companyId: string;
@@ -17,6 +19,8 @@ export interface CostEvent {
   cachedInputTokens: number;
   outputTokens: number;
   costCents: number;
+  costSource: CostSource;
+  costMetadata: Record<string, unknown> | null;
   occurredAt: Date;
   createdAt: Date;
 }

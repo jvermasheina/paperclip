@@ -28,7 +28,10 @@ describe("parseCodexJsonl", () => {
         inputTokens: 10,
         cachedInputTokens: 2,
         outputTokens: 4,
+        reasoningOutputTokens: 0,
       },
+      costUsd: null,
+      costField: null,
       errorMessage: "resume failed",
     });
   });
@@ -61,8 +64,47 @@ describe("parseCodexJsonl", () => {
         inputTokens: 10,
         cachedInputTokens: 2,
         outputTokens: 4,
+        reasoningOutputTokens: 0,
       },
+      costUsd: null,
+      costField: null,
       errorMessage: null,
+    });
+  });
+
+  it("captures reported cost aliases and reasoning tokens from turn usage", () => {
+    const stdout = [
+      JSON.stringify({
+        type: "turn.completed",
+        usage: {
+          input_tokens: 1_000,
+          cached_input_tokens: 200,
+          output_tokens: 300,
+          reasoning_output_tokens: 700,
+          cost: { total: "0.0123" },
+        },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: {
+          input_tokens: 2_000,
+          cached_input_tokens: 500,
+          output_tokens: 400,
+          output_tokens_details: { reasoning_tokens: 800 },
+        },
+        total_cost_usd: 0.0456,
+      }),
+    ].join("\n");
+
+    expect(parseCodexJsonl(stdout)).toMatchObject({
+      usage: {
+        inputTokens: 2_000,
+        cachedInputTokens: 500,
+        outputTokens: 400,
+        reasoningOutputTokens: 800,
+      },
+      costUsd: 0.0456,
+      costField: "total_cost_usd",
     });
   });
 });

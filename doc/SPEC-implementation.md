@@ -278,13 +278,19 @@ Invariants:
 - `goal_id` uuid fk `goals.id` null
 - `billing_code` text null
 - `provider` text not null
+- `biller` text not null
+- `billing_type` text not null
 - `model` text not null
 - `input_tokens` int not null default 0
+- `cached_input_tokens` int not null default 0
 - `output_tokens` int not null default 0
 - `cost_cents` int not null
+- `cost_source` enum/text: `reported | estimated | unavailable` not null default `unavailable`
+- `cost_metadata` jsonb null
 - `occurred_at` timestamptz not null
 
 Invariant: each event must attach to agent and company; rollups are aggregation, never manually edited.
+When model spend is estimated from a maintained pricing table instead of directly reported by a provider, the row must be marked `estimated` and include enough metadata to explain the rate source and token inputs. Unpriced token usage should still write a visible `unavailable` provenance row instead of silently disappearing.
 
 ## 7.10 `approvals`
 
