@@ -972,9 +972,8 @@ describeEmbeddedPostgres("issueThreadInteractionService", () => {
       id: randomUUID(),
       companyId,
       issueId,
-      authorAgentId: randomUUID(),
-      authorType: "agent",
-      body: "Agent-side progress note.",
+      authorType: "system",
+      body: "System-side progress note.",
       createdAt: new Date("2026-05-18T12:00:30.000Z"),
       updatedAt: new Date("2026-05-18T12:00:30.000Z"),
     });
