@@ -767,10 +767,7 @@ export function ChangesTab({ context }: PluginDetailTabProps) {
                 >
                   <div
                     key="header"
-                    className={[
-                      "flex min-w-0 items-center justify-between gap-3 border border-b-0 border-border bg-muted/35 px-3 py-2",
-                      mode === "unified" ? "sticky top-0 z-10 shadow-sm" : "",
-                    ].join(" ")}
+                    className="sticky top-0 z-30 flex min-w-0 items-center justify-between gap-3 border border-b-0 border-border bg-background px-3 py-2 shadow-sm"
                   >
                     <div key="left" className="flex min-w-0 items-start gap-2">
                       <button
