@@ -1,6 +1,6 @@
 import { isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Github } from "lucide-react";
+import { Check, Copy, ExternalLink, Github, WrapText } from "lucide-react";
 import Markdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
@@ -107,6 +107,21 @@ function mergeScrollableBlockStyle(style?: React.CSSProperties): React.CSSProper
   return {
     ...scrollableBlockStyle,
     ...style,
+  };
+}
+
+function mergeCodeBlockStyle(
+  style: React.CSSProperties | undefined,
+  wrapped: boolean,
+): React.CSSProperties {
+  if (!wrapped) return mergeScrollableBlockStyle(style);
+  return {
+    ...style,
+    maxWidth: "100%",
+    overflowX: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
   };
 }
 
@@ -364,6 +379,7 @@ function CodeBlock({
 }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [wrapped, setWrapped] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -402,32 +418,46 @@ function CodeBlock({
   }, [children]);
 
   const label = failed ? "Copy failed" : copied ? "Copied!" : "Copy";
+  const wrapLabel = wrapped ? "Disable line wrap" : "Wrap lines";
 
   return (
     <div className="paperclip-markdown-codeblock">
       <pre
         {...preProps}
         ref={preRef}
-        style={mergeScrollableBlockStyle(preProps.style as React.CSSProperties | undefined)}
+        style={mergeCodeBlockStyle(preProps.style as React.CSSProperties | undefined, wrapped)}
       >
         {children}
       </pre>
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label="Copy code"
-        title={label}
-        className="paperclip-markdown-codeblock-copy"
-        data-copied={copied || undefined}
-        data-failed={failed || undefined}
-      >
-        {copied && !failed ? (
-          <Check aria-hidden="true" className="h-3.5 w-3.5" />
-        ) : (
-          <Copy aria-hidden="true" className="h-3.5 w-3.5" />
-        )}
-        <span className="paperclip-markdown-codeblock-copy-label">{label}</span>
-      </button>
+      <div className="paperclip-markdown-codeblock-actions" data-active={copied || failed || undefined}>
+        <button
+          type="button"
+          onClick={() => setWrapped((next) => !next)}
+          aria-label={wrapLabel}
+          title={wrapLabel}
+          aria-pressed={wrapped}
+          className="paperclip-markdown-codeblock-button paperclip-markdown-codeblock-wrap"
+          data-wrapped={wrapped || undefined}
+        >
+          <WrapText aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy code"
+          title={label}
+          className="paperclip-markdown-codeblock-button paperclip-markdown-codeblock-copy"
+          data-copied={copied || undefined}
+          data-failed={failed || undefined}
+        >
+          {copied && !failed ? (
+            <Check aria-hidden="true" className="h-3.5 w-3.5" />
+          ) : (
+            <Copy aria-hidden="true" className="h-3.5 w-3.5" />
+          )}
+          <span className="paperclip-markdown-codeblock-copy-label">{label}</span>
+        </button>
+      </div>
     </div>
   );
 }
