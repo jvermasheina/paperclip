@@ -4376,6 +4376,67 @@ export function issueService(db: Db) {
       };
     },
 
+    listAcceptedPlanDecompositions: async (sourceIssueId: string) => {
+      const sourceIssue = await db
+        .select({ id: issues.id, companyId: issues.companyId })
+        .from(issues)
+        .where(eq(issues.id, sourceIssueId))
+        .then((rows) => rows[0] ?? null);
+      if (!sourceIssue) return [];
+
+      const rows = await db
+        .select({
+          decomposition: issuePlanDecompositions,
+          revisionNumber: documentRevisions.revisionNumber,
+        })
+        .from(issuePlanDecompositions)
+        .leftJoin(
+          documentRevisions,
+          eq(documentRevisions.id, issuePlanDecompositions.acceptedPlanRevisionId),
+        )
+        .where(and(
+          eq(issuePlanDecompositions.companyId, sourceIssue.companyId),
+          eq(issuePlanDecompositions.sourceIssueId, sourceIssue.id),
+        ))
+        .orderBy(desc(issuePlanDecompositions.createdAt));
+
+      if (rows.length === 0) return [];
+
+      const allChildIds = new Set<string>();
+      for (const row of rows) {
+        for (const childId of normalizeIssuePlanDecompositionChildIds(row.decomposition.childIssueIds)) {
+          allChildIds.add(childId);
+        }
+      }
+
+      const childIssueRows = allChildIds.size > 0
+        ? await db
+            .select({
+              id: issues.id,
+              identifier: issues.identifier,
+              title: issues.title,
+              status: issues.status,
+              priority: issues.priority,
+              assigneeAgentId: issues.assigneeAgentId,
+              assigneeUserId: issues.assigneeUserId,
+            })
+            .from(issues)
+            .where(and(eq(issues.companyId, sourceIssue.companyId), inArray(issues.id, Array.from(allChildIds))))
+        : [];
+      const childIssueMap = new Map(childIssueRows.map((row) => [row.id, row]));
+
+      return rows.map((row) => {
+        const childIds = normalizeIssuePlanDecompositionChildIds(row.decomposition.childIssueIds);
+        return {
+          ...row.decomposition,
+          acceptedPlanRevisionNumber: row.revisionNumber ?? null,
+          childIssues: childIds
+            .map((childId) => childIssueMap.get(childId) ?? null)
+            .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+        };
+      });
+    },
+
     create: async (
       companyId: string,
       data: IssueCreateInput,

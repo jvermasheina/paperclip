@@ -3475,4 +3475,41 @@ describeEmbeddedPostgres("accepted plan decomposition", () => {
       status: 409,
     });
   });
+
+  it("lists persisted decompositions with child issue summaries", async () => {
+    const { sourceIssueId, acceptedPlanRevisionId, assigneeAgentId } = await seedAcceptedPlanIssue();
+
+    const initial = await svc.listAcceptedPlanDecompositions(sourceIssueId);
+    expect(initial).toEqual([]);
+
+    const result = await svc.decomposeAcceptedPlan(sourceIssueId, {
+      acceptedPlanRevisionId,
+      children: [
+        {
+          title: "Surface decomposition status in operator UI",
+          status: "todo",
+          workMode: "standard",
+          priority: "medium",
+        },
+        {
+          title: "Add regression coverage",
+          status: "todo",
+          workMode: "standard",
+          priority: "medium",
+        },
+      ],
+      actorAgentId: assigneeAgentId,
+    });
+
+    const decompositions = await svc.listAcceptedPlanDecompositions(sourceIssueId);
+    expect(decompositions).toHaveLength(1);
+    const [record] = decompositions;
+    expect(record?.status).toBe("completed");
+    expect(record?.acceptedPlanRevisionId).toBe(acceptedPlanRevisionId);
+    expect(record?.acceptedPlanRevisionNumber).toBeTypeOf("number");
+    expect(record?.childIssues.map((child) => child.id).sort()).toEqual(
+      [...result.childIssueIds].sort(),
+    );
+    expect(record?.childIssues.every((child) => typeof child.title === "string")).toBe(true);
+  });
 });

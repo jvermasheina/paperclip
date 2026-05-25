@@ -179,6 +179,21 @@ export interface AcceptedPlanDecompositionResult {
   newlyCreatedChildIssueIds: string[];
 }
 
+export interface AcceptedPlanDecompositionChildIssue {
+  id: string;
+  identifier: string | null;
+  title: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  assigneeAgentId: string | null;
+  assigneeUserId: string | null;
+}
+
+export interface AcceptedPlanDecompositionSummary extends AcceptedPlanDecomposition {
+  acceptedPlanRevisionNumber: number | null;
+  childIssues: AcceptedPlanDecompositionChildIssue[];
+}
+
 export interface IssueRelationIssueSummary {
   id: string;
   identifier: string | null;

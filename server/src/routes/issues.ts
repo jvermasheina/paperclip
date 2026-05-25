@@ -3333,6 +3333,18 @@ export function issueRoutes(
     res.status(201).json(issue);
   });
 
+  router.get("/issues/:id/accepted-plan-decompositions", async (req, res) => {
+    const sourceIssueId = req.params.id as string;
+    const sourceIssue = await svc.getById(sourceIssueId);
+    if (!sourceIssue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, sourceIssue.companyId);
+    const decompositions = await svc.listAcceptedPlanDecompositions(sourceIssue.id);
+    res.json(decompositions);
+  });
+
   router.post("/issues/:id/accepted-plan-decompositions", validate(createAcceptedPlanDecompositionSchema), async (req, res) => {
     const sourceIssueId = req.params.id as string;
     const sourceIssue = await svc.getById(sourceIssueId);

@@ -211,6 +211,8 @@ export type {
   AcceptedPlanDecompositionChild,
   AcceptedPlanDecomposition,
   AcceptedPlanDecompositionResult,
+  AcceptedPlanDecompositionChildIssue,
+  AcceptedPlanDecompositionSummary,
   IssueThreadInteractionBase,
   SuggestTasksInteraction,
   AskUserQuestionsInteraction,
