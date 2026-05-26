@@ -30,6 +30,13 @@ function makeRect(left: number, top: number, width: number, height: number): DOM
   } as DOMRect;
 }
 
+function makeRange(rects: DOMRect[], commonAncestorContainer: Node = document.createTextNode("")): Range {
+  return {
+    commonAncestorContainer,
+    getClientRects: () => rects,
+  } as unknown as Range;
+}
+
 describe("DocumentAnnotationLayer", () => {
   let container: HTMLDivElement;
   let rectSpy: ReturnType<typeof vi.spyOn>;
@@ -38,11 +45,7 @@ describe("DocumentAnnotationLayer", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
-    mockRangesForNormalizedSpan.mockReturnValue([
-      {
-        getClientRects: () => [makeRect(8, 12, 80, 18)],
-      },
-    ]);
+    mockRangesForNormalizedSpan.mockReturnValue([makeRange([makeRect(8, 12, 80, 18)])]);
     rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(makeRect(0, 0, 400, 300));
   });
 
@@ -95,5 +98,41 @@ describe("DocumentAnnotationLayer", () => {
       expect(backgroundClasses.some((className) => className.startsWith("bg-yellow-"))).toBe(true);
       expect(backgroundClasses.some((className) => className.startsWith("dark:bg-yellow-"))).toBe(true);
     }
+  });
+
+  it("does not render highlights for text clipped by folded document content", async () => {
+    const body = document.createElement("div");
+    const clippedContent = document.createElement("div");
+    clippedContent.className = "fold-curtain__content";
+    const hiddenText = document.createTextNode("Hidden folded text");
+    clippedContent.appendChild(hiddenText);
+    body.appendChild(clippedContent);
+    mockRangesForNormalizedSpan.mockReturnValue([makeRange([makeRect(8, 60, 80, 18)], hiddenText)]);
+    rectSpy.mockImplementation(function (this: HTMLElement) {
+      if (this === clippedContent) return makeRect(0, 0, 400, 40);
+      return makeRect(0, 0, 400, 120);
+    });
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <DocumentAnnotationLayer
+          containerRef={{ current: body }}
+          markdown="Hidden folded text"
+          threads={[
+            { id: "hidden", selectedText: "Hidden folded text", status: "open", anchorState: "active" },
+          ]}
+          focusedThreadId={null}
+          onThreadFocus={vi.fn()}
+          pendingAnchor={null}
+          onPendingAnchorChange={vi.fn()}
+          onRequestComment={vi.fn()}
+        />,
+      );
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    });
+
+    expect(container.querySelector(".paperclip-doc-annotation-highlight")).toBeNull();
+    expect(container.querySelector(".paperclip-doc-annotation-hit-target")).toBeNull();
   });
 });

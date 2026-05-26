@@ -67,6 +67,56 @@ interface ToolbarPosition {
   left: number;
 }
 
+function elementFromNode(node: Node | null | undefined): HTMLElement | null {
+  if (!node) return null;
+  if (node instanceof HTMLElement) return node;
+  const parent = node.parentElement;
+  return parent instanceof HTMLElement ? parent : null;
+}
+
+function intersectRects(a: DOMRect, b: DOMRect): DOMRect | null {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (right <= left || bottom <= top) return null;
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function clipsOverflow(element: HTMLElement) {
+  if (element.classList.contains("fold-curtain__content")) return true;
+  if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") return false;
+  const style = window.getComputedStyle(element);
+  return [style.overflow, style.overflowX, style.overflowY].some((value) =>
+    value === "hidden" || value === "clip" || value === "auto" || value === "scroll",
+  );
+}
+
+function visibleClipRectForRange(range: Range, container: HTMLElement): DOMRect | null {
+  let clipRect = container.getBoundingClientRect();
+  let element = elementFromNode(range.commonAncestorContainer);
+  while (element) {
+    if (clipsOverflow(element)) {
+      const nextClipRect = intersectRects(clipRect, element.getBoundingClientRect());
+      if (!nextClipRect) return null;
+      clipRect = nextClipRect;
+    }
+    if (element === container) break;
+    element = element.parentElement;
+  }
+  return clipRect;
+}
+
 export function DocumentAnnotationLayer({
   containerRef,
   markdown,
@@ -84,7 +134,6 @@ export function DocumentAnnotationLayer({
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
-  const layerContainerRef = useRef<HTMLDivElement | null>(null);
   const lastCaptureSelectionRequestIdRef = useRef<number>(0);
 
   const visibleThreads = useMemo(() => {
@@ -109,16 +158,20 @@ export function DocumentAnnotationLayer({
       });
       const startIndex = next.length;
       for (const range of ranges) {
+        const visibleClipRect = visibleClipRectForRange(range, container);
+        if (!visibleClipRect) continue;
         for (const rect of Array.from(range.getClientRects())) {
           if (rect.width === 0 || rect.height === 0) continue;
+          const visibleRect = intersectRects(rect, visibleClipRect);
+          if (!visibleRect) continue;
           next.push({
             threadId: thread.id,
             status: thread.status,
             anchorState: thread.anchorState,
-            top: rect.top - overlayRect.top,
-            left: rect.left - overlayRect.left,
-            width: rect.width,
-            height: rect.height,
+            top: visibleRect.top - overlayRect.top,
+            left: visibleRect.left - overlayRect.left,
+            width: visibleRect.width,
+            height: visibleRect.height,
             isTail: false,
           });
         }
@@ -161,10 +214,10 @@ export function DocumentAnnotationLayer({
 
     const mutationObserver = typeof window.MutationObserver === "function" && container
       ? new window.MutationObserver((mutations) => {
-        const layer = layerContainerRef.current;
-        const onlyLayerMutations = layer
-          ? mutations.every((mutation) => layer.contains(mutation.target))
-          : false;
+        const onlyLayerMutations = mutations.every((mutation) => {
+          const target = elementFromNode(mutation.target);
+          return !!target?.closest(".paperclip-doc-annotation-layer, .paperclip-doc-annotation-visual-layer");
+        });
         if (!onlyLayerMutations) schedule();
       })
       : null;
@@ -245,16 +298,49 @@ export function DocumentAnnotationLayer({
   };
 
   return (
-    <div
-      ref={layerContainerRef}
-      className="paperclip-doc-annotation-layer pointer-events-none absolute inset-0 z-0"
-      aria-hidden="true"
-    >
-      <div ref={overlayRef} className="relative h-full w-full">
+    <>
+      <div className="paperclip-doc-annotation-visual-layer pointer-events-none absolute inset-0 z-0" aria-hidden="true">
+        <div className="relative h-full w-full">
+          {highlightRects.map((rect, index) => {
+            const isFocused = rect.threadId === focusedThreadId;
+            const isStale = rect.anchorState === "stale";
+            const isResolved = rect.status === "resolved";
+            return (
+              <span
+                key={`visual-${rect.threadId}-${index}`}
+                data-thread-id={rect.threadId}
+                data-anchor-state={rect.anchorState}
+                data-status={rect.status}
+                data-focused={isFocused || undefined}
+                className={cn(
+                  "paperclip-doc-annotation-highlight absolute rounded-none transition-colors",
+                  // base box treatment (replaces the previous baseline border)
+                  isResolved
+                    ? "bg-yellow-100 outline outline-1 outline-dashed outline-offset-0 outline-yellow-700/45 dark:bg-yellow-700 dark:outline-yellow-200/45"
+                    : isStale
+                      ? "bg-yellow-200 outline outline-2 outline-dashed outline-offset-0 outline-yellow-700/65 dark:bg-yellow-600 dark:outline-yellow-200/70"
+                      : isFocused
+                        ? "bg-yellow-300 outline outline-2 outline-offset-0 outline-yellow-700/85 shadow-[0_0_0_1px_var(--color-background)] dark:bg-yellow-500 dark:outline-yellow-200/85"
+                        : "bg-yellow-200 dark:bg-yellow-600",
+                )}
+                style={{
+                  top: rect.top,
+                  left: rect.left,
+                  width: rect.width,
+                  height: rect.height,
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <div
+        className="paperclip-doc-annotation-layer pointer-events-none absolute inset-0 z-[2]"
+        aria-hidden="true"
+      >
+        <div ref={overlayRef} className="relative h-full w-full">
         {highlightRects.map((rect, index) => {
           const isFocused = rect.threadId === focusedThreadId;
-          const isStale = rect.anchorState === "stale";
-          const isResolved = rect.status === "resolved";
           return (
             <button
               key={`${rect.threadId}-${index}`}
@@ -265,15 +351,8 @@ export function DocumentAnnotationLayer({
               data-focused={isFocused || undefined}
               aria-label="Open annotation thread"
               className={cn(
-                "paperclip-doc-annotation-highlight pointer-events-auto absolute cursor-pointer rounded-none transition-colors",
-                // base box treatment (replaces the previous baseline border)
-                isResolved
-                  ? "bg-yellow-100 outline outline-1 outline-dashed outline-offset-0 outline-yellow-700/45 hover:bg-yellow-200 dark:bg-yellow-700 dark:outline-yellow-200/45 dark:hover:bg-yellow-600"
-                  : isStale
-                    ? "bg-yellow-200 outline outline-2 outline-dashed outline-offset-0 outline-yellow-700/65 hover:bg-yellow-300 dark:bg-yellow-600 dark:outline-yellow-200/70 dark:hover:bg-yellow-500"
-                    : isFocused
-                      ? "bg-yellow-300 outline outline-2 outline-offset-0 outline-yellow-700/85 shadow-[0_0_0_1px_var(--color-background)] hover:bg-yellow-300 dark:bg-yellow-500 dark:outline-yellow-200/85 dark:hover:bg-yellow-400"
-                      : "bg-yellow-200 hover:bg-yellow-300 dark:bg-yellow-600 dark:hover:bg-yellow-500",
+                "paperclip-doc-annotation-hit-target pointer-events-auto absolute cursor-pointer rounded-none bg-transparent",
+                isFocused && "ring-1 ring-transparent",
               )}
               style={{
                 top: rect.top,
@@ -332,7 +411,8 @@ export function DocumentAnnotationLayer({
             </Button>
           </div>
         ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

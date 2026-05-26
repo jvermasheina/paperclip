@@ -287,7 +287,9 @@ export function IssueDocumentAnnotations({
         className="relative min-w-0"
         data-testid={`document-annotation-body-${doc.key}`}
       >
-        {children}
+        <div className="relative z-[1]">
+          {children}
+        </div>
         {!historicalPreview && doc.latestRevisionId ? (
           <DocumentAnnotationLayer
             containerRef={containerRef}
