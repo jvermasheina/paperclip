@@ -170,6 +170,10 @@ describeEmbeddedPostgres("companySkillService.installFromCatalog", () => {
     });
     await expect(fs.readFile(path.join(result.skill.sourceLocator!, "SKILL.md"), "utf8")).resolves.toBe(sampleSkillMarkdown);
     await expect(fs.readFile(path.join(result.skill.sourceLocator!, "references/checklist.md"), "utf8")).resolves.toBe(sampleReferenceMarkdown);
+    const listed = await svc.list(companyId);
+    expect(listed.find((skill) => skill.id === result.skill.id)).toMatchObject({
+      catalogKind: "bundled",
+    });
   });
 
   it("materializes catalog asset files without UTF-8 rewriting", async () => {

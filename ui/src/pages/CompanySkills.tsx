@@ -313,13 +313,18 @@ function readonlyMetadataKind(metadata: Record<string, unknown> | null | undefin
   return null;
 }
 
-function classifySource(skill: { sourceBadge: CompanySkillSourceBadge; sourceType: string; metadata?: Record<string, unknown> | null }): SourceFilter {
+function classifySource(skill: {
+  sourceBadge: CompanySkillSourceBadge;
+  sourceType: string;
+  catalogKind?: "bundled" | "optional" | null;
+  metadata?: Record<string, unknown> | null;
+}): SourceFilter {
   if (skill.sourceBadge === "paperclip") return "company";
   if (skill.sourceType === "local_path" && !skill.sourceBadge.toString().includes("github")) {
     return "company";
   }
   if (skill.sourceType === "catalog" || skill.sourceBadge === "catalog") {
-    const kind = readonlyMetadataKind(skill.metadata);
+    const kind = skill.catalogKind ?? readonlyMetadataKind(skill.metadata);
     if (kind === "bundled") return "bundled";
     if (kind === "optional") return "optional";
     return "company";
@@ -1272,7 +1277,7 @@ function SkillList({
     const haystack = `${skill.name} ${skill.key} ${skill.slug} ${skill.sourceLabel ?? ""}`.toLowerCase();
     if (!haystack.includes(skillFilter.toLowerCase())) return false;
     if (sourceFilter === "all") return true;
-    const skillSource = classifySource(skill as CompanySkillListItem & { metadata?: Record<string, unknown> | null });
+    const skillSource = classifySource(skill);
     return skillSource === sourceFilter;
   });
 
@@ -2070,7 +2075,7 @@ export function CompanySkills() {
   const sourceCounts = useMemo<Record<SourceFilter, number>>(() => {
     const counts: Record<SourceFilter, number> = { all: installedSkills.length, company: 0, bundled: 0, optional: 0, external: 0 };
     for (const skill of installedSkills) {
-      const cls = classifySource(skill as CompanySkillListItem & { metadata?: Record<string, unknown> | null });
+      const cls = classifySource(skill);
       counts[cls] += 1;
     }
     return counts;

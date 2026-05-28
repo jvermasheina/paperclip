@@ -51,6 +51,7 @@ export interface CompanySkillListItem {
   sourceLabel: string | null;
   sourceBadge: CompanySkillSourceBadge;
   sourcePath: string | null;
+  catalogKind: "bundled" | "optional" | null;
 }
 
 export interface CompanySkillUsageAgent {

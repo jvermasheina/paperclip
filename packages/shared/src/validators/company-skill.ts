@@ -35,6 +35,7 @@ export const companySkillListItemSchema = companySkillSchema.extend({
   editableReason: z.string().nullable(),
   sourceLabel: z.string().nullable(),
   sourceBadge: companySkillSourceBadgeSchema,
+  catalogKind: z.enum(["bundled", "optional"]).nullable(),
 });
 
 export const companySkillUsageAgentSchema = z.object({

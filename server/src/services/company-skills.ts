@@ -150,6 +150,7 @@ type SkillSourceMeta = {
   workspaceName?: string;
   workspaceCwd?: string;
   catalogId?: string;
+  catalogKind?: string;
   originHash?: string;
   originVersion?: string;
   originSnapshotLocator?: string;
@@ -1882,6 +1883,10 @@ function enrichSkill(skill: CompanySkill, attachedAgentCount: number, usedByAgen
 
 function toCompanySkillListItem(skill: CompanySkillListRow, attachedAgentCount: number): CompanySkillListItem {
   const source = deriveSkillSourceInfo(skill);
+  const metadata = getSkillMeta(skill);
+  const catalogKind = skill.sourceType === "catalog" && (metadata.catalogKind === "bundled" || metadata.catalogKind === "optional")
+    ? metadata.catalogKind
+    : null;
   return {
     id: skill.id,
     companyId: skill.companyId,
@@ -1903,6 +1908,7 @@ function toCompanySkillListItem(skill: CompanySkillListRow, attachedAgentCount: 
     sourceLabel: source.sourceLabel,
     sourceBadge: source.sourceBadge,
     sourcePath: source.sourcePath,
+    catalogKind,
   };
 }
 
