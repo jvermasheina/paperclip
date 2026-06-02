@@ -56,6 +56,15 @@ export interface HeartbeatRun {
   createdAt: Date;
   updatedAt: Date;
   outputSilence?: HeartbeatRunOutputSilence;
+  coalesced?: boolean;
+  coalescedInto?: WakeupCoalesceTarget | null;
+  coalescedCount?: number | null;
+}
+
+export interface WakeupCoalesceTarget {
+  runId: string;
+  status: HeartbeatRunStatus;
+  scheduledAt: Date | string | null;
 }
 
 export type HeartbeatRunOutputSilenceLevel =

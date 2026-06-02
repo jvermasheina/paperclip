@@ -8983,6 +8983,31 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     await startNextQueuedRunForAgent(promotedRun.agentId);
   }
 
+  async function annotateWakeupRun<
+    T extends { id: string; status: string; scheduledRetryAt?: Date | null },
+  >(run: T, coalesced: boolean) {
+    if (!coalesced) {
+      return Object.assign({}, run, {
+        coalesced: false as const,
+        coalescedInto: null,
+        coalescedCount: 0,
+      });
+    }
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.runId, run.id));
+    return Object.assign({}, run, {
+      coalesced: true as const,
+      coalescedInto: {
+        runId: run.id,
+        status: run.status,
+        scheduledAt: run.scheduledRetryAt ?? null,
+      },
+      coalescedCount: countRow?.count ?? null,
+    });
+  }
+
   async function enqueueWakeup(agentId: string, opts: WakeupOptions = {}) {
     const source = opts.source ?? "on_demand";
     const triggerDetail = opts.triggerDetail ?? null;
@@ -9564,7 +9589,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       if (outcome.kind === "deferred" || outcome.kind === "skipped") return null;
       if (outcome.kind === "coalesced") {
         await startNextQueuedRunForAgent(agent.id);
-        return outcome.run;
+        return annotateWakeupRun(outcome.run, true);
       }
 
       const newRun = outcome.run;
@@ -9581,7 +9606,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       });
 
       await startNextQueuedRunForAgent(agent.id);
-      return newRun;
+      return annotateWakeupRun(newRun, false);
     }
 
     const activeRuns = await db
@@ -9639,7 +9664,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         runId: mergedRun.id,
         finishedAt: new Date(),
       });
-      return mergedRun;
+      return annotateWakeupRun(mergedRun, true);
     }
 
     const wakeupRequest = await db
@@ -9697,7 +9722,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
 
     await startNextQueuedRunForAgent(agent.id);
 
-    return newRun;
+    return annotateWakeupRun(newRun, false);
   }
 
   async function listProjectScopedRunIds(companyId: string, projectId: string) {
