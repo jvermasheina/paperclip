@@ -99,7 +99,29 @@ export async function heartbeatRun(opts: HeartbeatRunOptions): Promise<void> {
   }
 
   const run = invokeRes as HeartbeatRun;
-  console.log(pc.cyan(`Invoked heartbeat run ${run.id} for agent ${agent.name} (${agent.id})`));
+  if (run.coalesced && run.coalescedInto) {
+    const shortId = run.coalescedInto.runId.slice(0, 8);
+    const status = run.coalescedInto.status;
+    const scheduledAt = run.coalescedInto.scheduledAt;
+    const firesAt =
+      scheduledAt instanceof Date
+        ? scheduledAt.toISOString()
+        : typeof scheduledAt === "string" && scheduledAt
+        ? scheduledAt
+        : null;
+    const firesPart = firesAt ? `, fires at ${firesAt}` : "";
+    const countPart =
+      typeof run.coalescedCount === "number" && run.coalescedCount > 0
+        ? ` ${run.coalescedCount} wake request${run.coalescedCount === 1 ? "" : "s"} pending.`
+        : "";
+    console.log(
+      pc.yellow(
+        `Coalesced into existing run ${shortId} (${status}${firesPart}).${countPart}`,
+      ),
+    );
+  } else {
+    console.log(pc.cyan(`Invoked heartbeat run ${run.id} for agent ${agent.name} (${agent.id})`));
+  }
 
   const runId = run.id;
   let activeRunId: string | null = null;

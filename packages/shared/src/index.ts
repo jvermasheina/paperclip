@@ -532,6 +532,7 @@ export type {
   AgentRuntimeState,
   AgentTaskSession,
   AgentWakeupRequest,
+  WakeupCoalesceTarget,
   InstanceSchedulerHeartbeatAgent,
   LiveEvent,
   DashboardRunActivityDay,
