@@ -88,12 +88,42 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
 - instruction text such as `AGENTS.md` built from step 4; for local managed-bundle adapters, send this as top-level `instructionsBundle.files["AGENTS.md"]`. Do not set `adapterConfig.promptTemplate` or `bootstrapPromptTemplate` for new agents.
 - source issue linkage (`sourceIssueId` or `sourceIssueIds`) when this hire came from an issue
 
-### 7. Review the draft against the quality checklist
+### 7. Cost-SKU disclosure (REQUIRED — every hire request)
+
+Every hire comment MUST include a `## Cost-SKU disclosure` section. This is non-negotiable, even when you believe the role is "free-tier only". A textual "free-tier" claim without an itemized SKU table is exactly how the 2026-05 → 2026-06 Reitti incident accumulated €141 of unauthorized Gemini Pro Long spend across four Verifier agents over 50 days ([STOA-689](/STOA/issues/STOA-689) Stream 3 findings).
+
+List **every** third-party API/service the candidate agent will hit at runtime. Include the agent's LLM provider, image/audio/vector services, scheduling APIs, telemetry sinks, vendor SDKs surfaced via skills, and anything reached through `adapterConfig.env` keys. One row per SKU:
+
+| SKU | Provider | Auth path | Cost tier | Expected monthly volume | Budget cap |
+| --- | --- | --- | --- | --- | --- |
+| Claude API (Sonnet 4.6) | Anthropic | host subscription | subscription | ~5 M tokens | n/a (covered by host plan) |
+| Gemini 2.5 Pro | Google AI Studio | `GEMINI_API_KEY` env | paid-with-cap | ~2 M tokens | €20/mo board-approved |
+| Imagen 4.0 | Vertex AI | `GOOGLE_CLOUD_PROJECT` env | paid | ~50 images | board approval pending |
+
+Required fields per row:
+
+- **SKU** — concrete API surface (e.g. `Claude Messages API`, `Gemini text-generation`, `Imagen 4.0`, `Resend send`, `Stripe Checkout`).
+- **Provider** — the billing-bearing entity (Anthropic, Google AI Studio, Vertex AI / GCP project, etc.). Distinguish `Google AI Studio` (free-tier path) from `Vertex AI` / paid GCP projects — these LOOK identical and were the exact failure mode in Reitti.
+- **Auth path** — `host subscription`, OAuth, env var name (e.g. `GEMINI_API_KEY`), or scoped skill.
+- **Cost tier** — exactly one of `free`, `subscription` (covered by an existing host plan), `paid`, `paid-with-cap` (budget cap wired to billing alerts).
+- **Expected monthly volume** — token/request count rough order-of-magnitude. "Unknown" is acceptable only with a board-approved investigation budget.
+- **Budget cap** — explicit cap + alert wiring, or `n/a` for subscription/free, or "board approval pending" for paid SKUs without a cap.
+
+Rules:
+
+- If ANY row is `paid` or `paid-with-cap`, the hire comment MUST also propose a billing-alert wiring (cost-explorer alert, GCP budget alert, Anthropic usage alert) and the hire stays in `pending_approval` until the board confirms the alert exists.
+- An `AGENTS.md` claim such as "this agent uses free Gemini Flash" is not evidence. Cite the exact env var the runtime resolves and the billing project it routes through.
+- If the role's adapter is `claude_local` and the only LLM path is the host's Claude subscription, that single row is sufficient — but the section is still REQUIRED so the table exists for future audit.
+- Skills that the agent will receive via `desiredSkills` count: enumerate their third-party SKUs too (e.g. `frontend-design` may invoke Imagen; `paperclip` does not invoke billed APIs).
+
+The board uses this section as the authorization record for cost-bearing defaults. Omitting it is grounds for rejection.
+
+### 8. Review the draft against the quality checklist
 
 Before submitting, walk the draft-review checklist end-to-end and fix any item that does not pass:
 `skills/paperclip-create-agent/references/draft-review-checklist.md`
 
-### 8. Submit hire request
+### 9. Submit hire request
 
 ```sh
 curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
@@ -115,7 +145,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-h
   }'
 ```
 
-### 9. Handle governance state
+### 10. Handle governance state
 
 - if the response has `approval`, the hire is `pending_approval`
 - monitor and discuss on the approval thread
