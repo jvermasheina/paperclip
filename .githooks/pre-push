@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# .githooks/pre-push — STOA-718 free-tier-claim gate (local fast-feedback).
+#
+# Mirrors the CI check at .github/workflows/pr.yml (job `policy` →
+# `Free-tier-claim gate (STOA-718)`). Catches unverified "free-tier model"
+# / "costs nothing" / etc. claims in agent-config instruction files BEFORE
+# the push so authors don't burn a CI round-trip.
+#
+# Activation (opt-in):
+#   git config core.hooksPath .githooks
+#
+# Exit 0 on pass/skip, non-zero on block.
+
+set -euo pipefail
+
+SCRIPT_PATH="scripts/check-free-tier-claims.mjs"
+
+if [ ! -f "${SCRIPT_PATH}" ]; then
+  # Older clones predating STOA-718 just skip locally; CI still enforces.
+  exit 0
+fi
+
+if ! node "${SCRIPT_PATH}"; then
+  echo "" >&2
+  echo "pre-push: free-tier-claim gate failed locally (STOA-718)." >&2
+  echo "         Rephrase the flagged line(s) to neutral language OR add" >&2
+  echo "         the Approved-by + Cost-audit-cadence pair in the same file." >&2
+  exit 1
+fi
