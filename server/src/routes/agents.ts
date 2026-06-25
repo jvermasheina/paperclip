@@ -1738,9 +1738,13 @@ export function agentRoutes(
 
     const issuesSvc = issueService(db);
     const recoveryActionsSvc = issueRecoveryActionService(db);
+    // STOA-726: include `in_review` so an agent can still see issues it owns while
+    // waiting on a downstream review/approval/interaction. Board-orphan reviews
+    // (assigneeAgentId IS NULL) stay filtered out — the eq() on assigneeAgentId
+    // below excludes NULL by definition.
     const rows = await issuesSvc.list(req.actor.companyId, {
       assigneeAgentId: req.actor.agentId,
-      status: "todo,in_progress,blocked",
+      status: "todo,in_progress,in_review,blocked",
       includeRoutineExecutions: true,
       limit: ISSUE_LIST_DEFAULT_LIMIT,
     });
