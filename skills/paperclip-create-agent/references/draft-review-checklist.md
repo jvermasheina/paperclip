@@ -70,6 +70,17 @@ Use it for every path: exact template, adjacent template, or generic fallback.
 - [ ] If the role may handle private disclosures or security advisories, the hire names a confidential workflow (dedicated skill or documented manual process) instead of relying on normal issue threads
 - [ ] No tool, skill, or capability is listed that this environment cannot actually provide
 
+## H2. Cost-SKU disclosure (REQUIRED for every hire)
+
+- [ ] The hire comment contains a `## Cost-SKU disclosure` table covering EVERY third-party SKU the agent will hit at runtime — LLM, image/audio/vector, scheduling, telemetry, vendor SDKs reached via skills, anything resolved through `adapterConfig.env` keys
+- [ ] Each row lists `SKU | Provider | Auth path | Cost tier | Expected monthly volume | Budget cap`
+- [ ] Provider column distinguishes `Google AI Studio` (free) from `Vertex AI` / paid GCP project (paid) — these look identical at a glance and were the exact failure mode in the Reitti incident
+- [ ] Cost tier is exactly one of `free`, `subscription`, `paid`, `paid-with-cap` — no marketing words like "free-tier-ish"
+- [ ] Any `paid` or `paid-with-cap` row comes with a proposed billing-alert wiring (cost-explorer, GCP budget alert, Anthropic usage alert) and the hire is left in `pending_approval` until the board confirms
+- [ ] If the hire claims "free-tier only", the comment cites the exact env var the runtime resolves AND the billing project it routes through (do not accept textual claims)
+- [ ] `desiredSkills` entries are checked for their own SKU surface (e.g. `frontend-design` can invoke Imagen) and any billed APIs they bring are added to the disclosure table
+- [ ] At minimum a one-row disclosure exists even when the agent only uses the host's Claude subscription — the table is mandatory for future audit
+
 ## I. Done criteria
 
 - [ ] `AGENTS.md` states how the agent verifies its work before marking an issue done
@@ -89,6 +100,7 @@ Use it for every path: exact template, adjacent template, or generic fallback.
 - **Boilerplate pass-through.** If `AGENTS.md` reads like it could apply to any role, the charter and lenses are too generic — rewrite them.
 - **Quiet permission sprawl.** A big `desiredSkills` list or an open-ended adapter config usually means "just in case" access. Trim to what the charter needs.
 - **Capability expansion without review.** Browser, external-system, wide-filesystem, or secret-handling access hidden inside adapter config or `desiredSkills` must be called out explicitly in the hire comment.
+- **"Free-tier" textual claim with paid env underneath.** A line in `AGENTS.md` that says "this agent uses free Gemini Flash" while `adapterConfig.env.GEMINI_API_KEY` resolves to a paid Vertex AI / GCP project is the exact pattern that cost €141 over 50 days across four Verifier agents in the Reitti incident. The Cost-SKU disclosure table is the antidote — fill it in, do not rely on prose claims.
 - **Timer-heartbeat-by-default.** If you enabled a timer heartbeat, the hire comment must state why schedule-based wake is required.
 - **No confidential path for sensitive work.** Roles that may receive private advisories or incident details need a private workflow, not normal issue comments.
 - **Missing governance fields.** A hire without `sourceIssueId`, `icon`, or a resolvable reporting line is hard to audit later.
